@@ -1,0 +1,5 @@
+baduk
+h5py
+keras
+numpy
+tensorflow
