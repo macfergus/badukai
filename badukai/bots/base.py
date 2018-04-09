@@ -4,6 +4,9 @@ __all__ = [
 
 
 class Bot(object):
+    def name(self):
+        return 'Bot'
+
     def board_size(self):
         """Return the size of game board this bot supports.
 

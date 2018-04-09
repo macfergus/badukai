@@ -37,6 +37,7 @@ def main():
     if args.game_record_out:
         with open(args.game_record_out, 'w') as game_outf:
             badukai.io.save_game_as_sgf(
+                game_outf,
                 game, game_result,
                 black_name=black_bot.name(),
                 white_name=black_bot.name(),

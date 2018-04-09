@@ -11,6 +11,9 @@ class RandomBot(Bot):
     def __init__(self, board_size):
         self._board_size = board_size
 
+    def name(self):
+        return 'RandomBot'
+
     def board_size(self):
         return self._board_size
 
