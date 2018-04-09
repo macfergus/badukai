@@ -2,4 +2,5 @@ baduk
 h5py
 keras
 numpy
+six
 tensorflow
