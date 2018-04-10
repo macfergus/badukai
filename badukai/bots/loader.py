@@ -25,12 +25,18 @@ def load_bot(botfile):
     return ctor(bot_data['config'])
 
 
+def get_module_name(bot):
+    path = bot.__module__.split('.')
+    assert path[0] == 'badukai'
+    assert path[1] == 'bots'
+    return path[2]
+
+
 def save_bot(bot, botfile):
     if isinstance(botfile, six.string_types):
         botfile = h5py.File(botfile, 'w')
-    bot_module_name = bot.__module__.split('.')[-1]
     bot_data = botfile.create_group('bot')
-    bot_data.attrs['bot_module'] = bot_module_name
+    bot_data.attrs['bot_module'] = get_module_name(bot)
 
     bot_config = bot_data.create_group('config')
     bot.serialize(bot_config)
