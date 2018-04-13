@@ -36,8 +36,7 @@ class LibertiesEncoder(Encoder):
                 go_string = game_state.board.get_string(p)
 
                 if go_string is None:
-                    if game_state.does_move_violate_ko(game_state.next_player,
-                                                       Move.play(p)):
+                    if game_state.does_move_violate_ko(Move.play(p)):
                         board_tensor[10][r][c] = 1
                 else:
                     liberty_plane = min(4, go_string.num_liberties) - 1
@@ -51,14 +50,15 @@ class LibertiesEncoder(Encoder):
         """Turn a board point into an integer index."""
         if move.is_play:
             # Points are 1-indexed
-            return self._board_size * (point.row - 1) + (point.col - 1)
+            return self._board_size * (move.point.row - 1) + \
+                (move.point.col - 1)
         elif move.is_pass:
-            return self._pass_index
+            return self._pass_idx
         raise ValueError('Cannot encode resign move')
 
     def decode_move_index(self, index):
         """Turn an integer index into a board point."""
-        if index == self._pass_index:
+        if index == self._pass_idx:
             return Move.pass_turn()
         row = index // self._board_size
         col = index % self._board_size

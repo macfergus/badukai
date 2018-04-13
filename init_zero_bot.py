@@ -1,6 +1,7 @@
 import argparse
 
-from keras.layers import Activation, BatchNormalization, Conv2D, Dense, Input
+from keras.layers import Activation, BatchNormalization, Conv2D, Dense
+from keras.layers import Flatten, Input
 from keras.models import Model
 
 import badukai
@@ -31,15 +32,17 @@ def main():
         processed_board)
     policy_batch = BatchNormalization(axis=1)(policy_conv)
     policy_relu = Activation('relu')(policy_batch)
-    # Linear activation, cause it is logit of probs
-    policy_output = Dense(encoder.num_moves())(policy_relu)
+    policy_flat = Flatten()(policy_relu)
+    policy_output = Dense(encoder.num_moves(), activation='softmax')(
+        policy_flat)
 
     # Value output
     value_conv = Conv2D(1, (1, 1), data_format='channels_first')(
         processed_board)
     value_batch = BatchNormalization(axis=1)(value_conv)
     value_relu = Activation('relu')(value_batch)
-    value_hidden = Dense(256, activation='relu')(value_relu)
+    value_flat = Flatten()(value_relu)
+    value_hidden = Dense(256, activation='relu')(value_flat)
     value_output = Dense(1, activation='tanh')(value_hidden)
 
     model = Model(
