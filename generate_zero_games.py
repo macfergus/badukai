@@ -51,7 +51,11 @@ def main():
     parser.add_argument('--num-games', '-g', type=int, required=True)
     parser.add_argument('--rollouts-per-move', '-r', type=int, required=True)
     parser.add_argument('--game-record-out', '-o', required=True)
+    parser.add_argument('--gpu-frac', type=float)
     args = parser.parse_args()
+
+    if args.gpu_frac is not None:
+        badukai.kerasutil.set_gpu_memory_target(args.gpu_frac)
 
     black_bot = badukai.bots.load_bot(args.bot)
     black_bot.set_num_rollouts(args.rollouts_per_move)
