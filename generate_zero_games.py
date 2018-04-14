@@ -22,7 +22,7 @@ def record_game(black_bot, white_bot):
     printer = badukai.io.AsciiBoardPrinter()
     while not game.is_over():
         next_bot = players[game.next_player]
-        if num_moves < 30:
+        if num_moves < 20:
             next_bot.set_temperature(1.0)
         else:
             next_bot.set_temperature(0.0)
@@ -64,8 +64,9 @@ def main():
     for i in range(args.num_games):
         print('Game %d/%d...' % (i + 1, args.num_games))
         game_records.append(record_game(black_bot, white_bot))
-    with open(args.game_record_out, 'w') as outf:
-        badukai.bots.zero.save_game_records(game_records, outf)
+        with open(args.game_record_out, 'a') as outf:
+            badukai.bots.zero.save_game_records(game_records, outf)
+            game_records = []
 
 
 if __name__ == '__main__':
