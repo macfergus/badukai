@@ -8,7 +8,7 @@ ADD baduk-0.0.0-cp36-cp36m-linux_x86_64.whl /
 RUN /usr/local/bin/pip3 install baduk-0.0.0-cp36-cp36m-linux_x86_64.whl
 RUN /usr/local/bin/pip3 install -r /requirements.txt
 RUN mkdir /app
-ADD badukai /app/
+ADD badukai /app/badukai
 ADD *.py /app/
 WORKDIR /app
 ENTRYPOINT ["/usr/bin/python3"]

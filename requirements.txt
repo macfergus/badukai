@@ -1,4 +1,5 @@
 baduk
+boto3
 h5py
 keras
 numpy

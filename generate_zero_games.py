@@ -1,7 +1,9 @@
 import argparse
+import boto3
 import datetime
 import os
 import tempfile
+import uuid
 
 import requests
 
@@ -63,6 +65,7 @@ def main():
     parser.add_argument('--rollouts-per-move', '-r', type=int, required=True)
     parser.add_argument('--game-record-out', '-o', required=True)
     parser.add_argument('--gpu-frac', type=float)
+    parser.add_argument('--s3')
     args = parser.parse_args()
 
     if args.gpu_frac is not None:
@@ -92,6 +95,13 @@ def main():
     finally:
         if cleanup_bot:
             os.unlink(bot_file)
+
+    if args.s3:
+        print('Saving results to S3...')
+        bucket, path = args.s3.split('/', 1)
+        key = path + '/games-' + str(uuid.uuid4())
+        s3 = boto3.resource('s3')
+        s3.meta.client.upload_file(args.game_record_out, bucket, key)
 
 
 if __name__ == '__main__':
