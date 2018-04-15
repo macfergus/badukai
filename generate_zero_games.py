@@ -1,5 +1,9 @@
 import argparse
 import datetime
+import os
+import tempfile
+
+import requests
 
 import baduk
 import badukai
@@ -45,6 +49,13 @@ def record_game(black_bot, white_bot):
     return builder.build()
 
 
+def get_bot_from_url(url):
+    tempfd, tempfname = tempfile.mkstemp(prefix='tmp-httpbot')
+    resp = requests.get(url)
+    os.write(tempfd, resp.content)
+    return tempfname
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--bot', '-b', required=True)
@@ -57,20 +68,30 @@ def main():
     if args.gpu_frac is not None:
         badukai.kerasutil.set_gpu_memory_target(args.gpu_frac)
 
-    black_bot = badukai.bots.load_bot(args.bot)
-    black_bot.set_num_rollouts(args.rollouts_per_move)
-    white_bot = badukai.bots.load_bot(args.bot)
-    white_bot.set_num_rollouts(args.rollouts_per_move)
+    bot_file = args.bot
+    cleanup_bot = False
+    if bot_file.startswith('http://') or bot_file.startswith('https://'):
+        bot_file = get_bot_from_url(bot_file)
+        cleanup_bot = True
 
-    board_size = black_bot.board_size()
+    try:
+        black_bot = badukai.bots.load_bot(bot_file)
+        black_bot.set_num_rollouts(args.rollouts_per_move)
+        white_bot = badukai.bots.load_bot(bot_file)
+        white_bot.set_num_rollouts(args.rollouts_per_move)
 
-    game_records = []
-    for i in range(args.num_games):
-        print('Game %d/%d...' % (i + 1, args.num_games))
-        game_records.append(record_game(black_bot, white_bot))
-        with open(args.game_record_out, 'a') as outf:
-            badukai.bots.zero.save_game_records(game_records, outf)
-            game_records = []
+        board_size = black_bot.board_size()
+
+        game_records = []
+        for i in range(args.num_games):
+            print('Game %d/%d...' % (i + 1, args.num_games))
+            game_records.append(record_game(black_bot, white_bot))
+            with open(args.game_record_out, 'a') as outf:
+                badukai.bots.zero.save_game_records(game_records, outf)
+                game_records = []
+    finally:
+        if cleanup_bot:
+            os.unlink(bot_file)
 
 
 if __name__ == '__main__':
