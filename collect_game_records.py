@@ -1,7 +1,10 @@
 import argparse
 import boto3
+import io
 import os
 import tempfile
+
+import badukai
 
 
 def main():
@@ -18,9 +21,8 @@ def main():
         os.close(tempfd)
         clean_up_local_output = True
 
+    records = []
     try:
-        combined_body = bytes()
-
         bucket, path = args.s3_input.split('/', 1)
         client = boto3.client('s3')
         keep_going = True
@@ -32,14 +34,16 @@ def main():
                 obj_resp = client.get_object(
                     Bucket=bucket,
                     Key=c['Key'])
-                combined_body += obj_resp['Body'].read()
+                body_bytes = obj_resp['Body'].read()
+                body_text = io.StringIO(body_bytes.decode('utf-8'))
+                records += badukai.bots.zero.load_game_records(body_text)
             if response['IsTruncated']:
                 s3_args['ContinuationToken'] = response['NextContinuationToken']
             else:
                 keep_going = False
 
-        with open(local_output, 'wb') as outf:
-            outf.write(combined_body)
+        with open(local_output, 'w') as outf:
+            badukai.bots.zero.save_game_records(records, outf)
 
         if args.s3_output:
             bucket, key = args.s3_output.split('/', 1)

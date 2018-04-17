@@ -3,6 +3,8 @@ import random
 from operator import attrgetter, itemgetter
 
 import numpy as np
+from keras.optimizers import SGD
+from baduk import GameState
 
 from ... import encoders
 from ... import kerasutil
@@ -51,7 +53,7 @@ class Node(object):
         self.move = move
         self.parent = parent
         self._state = state
-        self._exploration_factor = 0.5
+        self._exploration_factor = 1.0
 
         self._encoder = encoder
         self._model = model
@@ -140,7 +142,7 @@ class ZeroBot(Bot):
         self._encoder = encoder
         self._model = model
         self._board_size = encoder.board_size()
-        self._num_rollouts = 100
+        self._num_rollouts = 900
         self._temperature = 0.0
         self.root = None
 
@@ -207,6 +209,33 @@ class ZeroBot(Bot):
             move = self._encoder.decode_move_index(idx)
             rv.append(self.root.num_visits(move))
         return rv
+
+    def train(self, game_records):
+        X = []
+        y_policy = []
+        y_value = []
+        gn = 0
+        for game_record in game_records:
+            winner = game_record.winner
+            print('Encoding game %d/%d...' % (gn + 1, len(game_records)))
+            gn += 1
+            game = GameState.new_game(self.board_size())
+            for move_record in game_record.move_records:
+                assert move_record.player == game.next_player
+                X.append(self._encoder.encode(game))
+                search_counts = np.array(move_record.visit_counts)
+                y_policy.append(search_counts / np.sum(search_counts))
+                y_value.append(1 if game.next_player == winner else -1)
+                game = game.apply_move(move_record.move)
+        X = np.array(X)
+        y_policy = np.array(y_policy)
+        y_value = np.array(y_value)
+        print(X.shape, y_policy.shape, y_value.shape)
+
+        self._model.compile(
+            SGD(lr=0.01, momentum=0.9),
+            loss=['categorical_crossentropy', 'mse'])
+        self._model.fit(X, [y_policy, y_value], batch_size=2048)
 
 
 def load_from_hdf5(h5group):
