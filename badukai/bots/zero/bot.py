@@ -136,6 +136,14 @@ class Node(object):
         if self.parent is not None:
             self.parent.record_visit(self.move, our_value)
 
+    def add_noise(self, noise, weight):
+        for i, noise_amount in enumerate(noise):
+            move = self._encoder.decode_move_index(i)
+            if move in self._branches:
+                self._branches[move].prior = \
+                    (1 - weight) * self._branches[move].prior + \
+                    weight * noise_amount
+
 
 class ZeroBot(Bot):
     def __init__(self, encoder, model):
@@ -145,6 +153,9 @@ class ZeroBot(Bot):
         self._num_rollouts = 900
         self._temperature = 0.0
         self.root = None
+
+        self._noise_concentration = 0.03
+        self._noise_weight = 0.25
 
     def name(self):
         return 'ZeroBot'
@@ -160,7 +171,10 @@ class ZeroBot(Bot):
 
     def select_move(self, game_state, temperature=0):
         self.root = Node(self._encoder, self._model, game_state)
-        # TODO Add noise to the root
+        self.root.add_noise(
+            np.random.dirichlet(
+                self._noise_concentration * np.ones(self._encoder.num_moves())),
+            self._noise_weight)
 
         for i in range(self._num_rollouts):
             # Find a leaf.
