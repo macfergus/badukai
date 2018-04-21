@@ -10,13 +10,16 @@ def main():
     parser.add_argument('--bot-out', required=True)
     args = parser.parse_args()
 
-    bot_file = args.bot
-    bot = badukai.bots.load_bot(bot_file)
+    with badukai.io.get_input(args.bot) as bot_file:
+        bot = badukai.bots.load_bot(bot_file)
 
-    game_records = badukai.bots.zero.load_game_records(open(args.games_input))
+    with badukai.io.get_input(args.games_input) as games_file:
+        game_records = badukai.bots.zero.load_game_records(open(games_file))
+
     bot.train(game_records)
 
-    badukai.bots.save_bot(bot, args.bot_out)
+    with badukai.io.open_output_filename(args.bot_out) as output_filename:
+        badukai.bots.save_bot(bot, output_filename)
 
 
 if __name__ == '__main__':
