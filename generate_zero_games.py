@@ -71,30 +71,22 @@ def main():
     if args.gpu_frac is not None:
         badukai.kerasutil.set_gpu_memory_target(args.gpu_frac)
 
-    bot_file = args.bot
-    cleanup_bot = False
-    if bot_file.startswith('http://') or bot_file.startswith('https://'):
-        bot_file = get_bot_from_url(bot_file)
-        cleanup_bot = True
-
-    try:
+    with badukai.io.get_input(args.bot) as bot_file:
         black_bot = badukai.bots.load_bot(bot_file)
-        black_bot.set_num_rollouts(args.rollouts_per_move)
         white_bot = badukai.bots.load_bot(bot_file)
-        white_bot.set_num_rollouts(args.rollouts_per_move)
 
-        board_size = black_bot.board_size()
+    black_bot.set_num_rollouts(args.rollouts_per_move)
+    white_bot.set_num_rollouts(args.rollouts_per_move)
 
-        game_records = []
-        for i in range(args.num_games):
-            print('Game %d/%d...' % (i + 1, args.num_games))
-            game_records.append(record_game(black_bot, white_bot))
-            with open(args.game_record_out, 'a') as outf:
-                badukai.bots.zero.save_game_records(game_records, outf)
-                game_records = []
-    finally:
-        if cleanup_bot:
-            os.unlink(bot_file)
+    board_size = black_bot.board_size()
+
+    game_records = []
+    for i in range(args.num_games):
+        print('Game %d/%d...' % (i + 1, args.num_games))
+        game_records.append(record_game(black_bot, white_bot))
+        with open(args.game_record_out, 'a') as outf:
+            badukai.bots.zero.save_game_records(game_records, outf)
+            game_records = []
 
     if args.s3:
         print('Saving results to S3...')
