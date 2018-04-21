@@ -1,8 +1,5 @@
 import argparse
-import boto3
-import datetime
 import os
-import tempfile
 import uuid
 
 import requests
@@ -51,13 +48,6 @@ def record_game(black_bot, white_bot):
     return builder.build()
 
 
-def get_bot_from_url(url):
-    tempfd, tempfname = tempfile.mkstemp(prefix='tmp-httpbot')
-    resp = requests.get(url)
-    os.write(tempfd, resp.content)
-    return tempfname
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--bot', '-b', required=True)
@@ -65,7 +55,6 @@ def main():
     parser.add_argument('--rollouts-per-move', '-r', type=int, required=True)
     parser.add_argument('--game-record-out', '-o', required=True)
     parser.add_argument('--gpu-frac', type=float)
-    parser.add_argument('--s3')
     args = parser.parse_args()
 
     if args.gpu_frac is not None:
@@ -84,16 +73,12 @@ def main():
     for i in range(args.num_games):
         print('Game %d/%d...' % (i + 1, args.num_games))
         game_records.append(record_game(black_bot, white_bot))
-        with open(args.game_record_out, 'a') as outf:
-            badukai.bots.zero.save_game_records(game_records, outf)
-            game_records = []
 
-    if args.s3:
-        print('Saving results to S3...')
-        bucket, path = args.s3.split('/', 1)
-        key = path + '/games-' + str(uuid.uuid4())
-        s3 = boto3.resource('s3')
-        s3.meta.client.upload_file(args.game_record_out, bucket, key)
+    output_file = args.game_record_out
+    if os.environ.get('AWS_BATCH_JOB_ARRAY_INDEX'):
+        output_file += '-' + str(uuid.uuid4())
+    with badukai.io.open_output(output_file) as outf:
+        badukai.bots.zero.save_game_records(game_records, outf)
 
 
 if __name__ == '__main__':
