@@ -224,7 +224,7 @@ class ZeroBot(Bot):
             rv.append(self.root.num_visits(move))
         return rv
 
-    def train(self, game_records):
+    def train(self, game_records, num_epochs=1):
         X = []
         y_policy = []
         y_value = []
@@ -249,7 +249,10 @@ class ZeroBot(Bot):
         self._model.compile(
             SGD(lr=0.01, momentum=0.9),
             loss=['categorical_crossentropy', 'mse'])
-        self._model.fit(X, [y_policy, y_value], batch_size=2048)
+        self._model.fit(
+            X, [y_policy, y_value],
+            batch_size=2048,
+            epochs=num_epochs)
 
 
 def load_from_hdf5(h5group):
