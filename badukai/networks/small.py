@@ -14,9 +14,9 @@ def conv_unit(filter_size, num_filters, input_shape=None):
 
 def layers(input_shape):
     return \
-        conv_unit(3, 128, input_shape=input_shape) + \
-        conv_unit(3, 128) + \
-        conv_unit(3, 128) + \
-        conv_unit(3, 128) + \
-        conv_unit(3, 128) + \
-        conv_unit(3, 128)
+        conv_unit(3, 96, input_shape=input_shape) + \
+        conv_unit(3, 96) + \
+        conv_unit(3, 96) + \
+        conv_unit(3, 96) + \
+        conv_unit(3, 96) + \
+        conv_unit(3, 96)
