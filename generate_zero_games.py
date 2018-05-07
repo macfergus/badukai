@@ -8,11 +8,13 @@ import baduk
 import badukai
 
 
-def record_game(black_bot, white_bot):
+def record_game(black_bot, white_bot, bump_temp_before):
     assert black_bot.board_size() == white_bot.board_size()
     board_size = black_bot.board_size()
 
-    max_game_length = 2 * board_size * board_size
+    max_game_length = max(
+        2 * board_size * board_size,
+        65)
 
     players = {
         baduk.Player.black: black_bot,
@@ -25,7 +27,7 @@ def record_game(black_bot, white_bot):
     printer = badukai.io.AsciiBoardPrinter()
     while not game.is_over():
         next_bot = players[game.next_player]
-        if num_moves < 20:
+        if num_moves < bump_temp_before:
             next_bot.set_temperature(1.0)
         else:
             next_bot.set_temperature(0.0)
@@ -54,6 +56,7 @@ def main():
     parser.add_argument('--num-games', '-g', type=int, required=True)
     parser.add_argument('--rollouts-per-move', '-r', type=int, required=True)
     parser.add_argument('--game-record-out', '-o', required=True)
+    parser.add_argument('--bump-temperature-before', '-t', type=int, default=0)
     parser.add_argument('--gpu-frac', type=float)
     args = parser.parse_args()
 
@@ -72,7 +75,8 @@ def main():
     game_records = []
     for i in range(args.num_games):
         print('Game %d/%d...' % (i + 1, args.num_games))
-        game_records.append(record_game(black_bot, white_bot))
+        game_records.append(
+            record_game(black_bot, white_bot, args.bump_temperature_before))
 
     output_file = args.game_record_out
     if os.environ.get('AWS_BATCH_JOB_ARRAY_INDEX'):

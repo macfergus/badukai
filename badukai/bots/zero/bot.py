@@ -53,7 +53,7 @@ class Node(object):
         self.move = move
         self.parent = parent
         self._state = state
-        self._exploration_factor = 1.0
+        self._exploration_factor = 1.5
 
         self._encoder = encoder
         self._model = model
