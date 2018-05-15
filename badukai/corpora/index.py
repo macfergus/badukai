@@ -76,6 +76,9 @@ class Corpus:
                     except KeyError as e:
                         # print('Reject {}: missing {}'.format(sgf, e))
                         pass
+                    except ValueError as e:
+                        print('Error on {}: {}'.format(sgf, e))
+                        pass
             idx += 1
         return game_records
 
