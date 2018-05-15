@@ -3,7 +3,7 @@ import random
 from operator import attrgetter, itemgetter
 
 import numpy as np
-from keras.optimizers import SGD
+from keras.optimizers import Adadelta, SGD
 from baduk import GameState
 
 from ... import encoders
@@ -253,6 +253,36 @@ class ZeroBot(Bot):
             X, [y_policy, y_value],
             batch_size=2048,
             epochs=num_epochs)
+
+    def train_from_human(self, human_game_records, batch_size=2048):
+        X = []
+        y_policy = []
+        y_value = []
+        gn = 0
+        for game_record in human_game_records:
+            print('Encoding game %d/%d...' % (gn + 1, len(human_game_records)))
+            gn += 1
+            winner = game_record.winner
+            game = game_record.initial_state
+            for move in game_record.moves:
+                X.append(self._encoder.encode(game))
+                search_counts = np.zeros(self._encoder.num_moves())
+                search_counts[self._encoder.encode_move(move)] = 1
+                y_policy.append(search_counts)
+                y_value.append(1 if game.next_player == winner else -1)
+                game = game.apply_move(move)
+        X = np.array(X)
+        y_policy = np.array(y_policy)
+        y_value = np.array(y_value)
+        print(X.shape, y_policy.shape, y_value.shape)
+
+        self._model.compile(
+            Adadelta(),
+            loss=['categorical_crossentropy', 'mse'])
+        self._model.fit(
+            X, [y_policy, y_value],
+            batch_size=batch_size,
+            epochs=1)
 
 
 def load_from_hdf5(h5group):
