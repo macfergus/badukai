@@ -281,6 +281,9 @@ class ZeroBot(Bot):
             loss=['categorical_crossentropy', 'mse'])
         self._model.fit(
             X, [y_policy, y_value],
+            # Seeing massive overfitting on individual game results.
+            # Hopefully lowering the loss weight helps.
+            loss_weights=[1.0, 0.1],
             batch_size=batch_size,
             epochs=1)
 
