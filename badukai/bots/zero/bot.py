@@ -278,12 +278,12 @@ class ZeroBot(Bot):
 
         self._model.compile(
             Adadelta(),
-            loss=['categorical_crossentropy', 'mse'])
-        self._model.fit(
-            X, [y_policy, y_value],
+            loss=['categorical_crossentropy', 'mse'],
             # Seeing massive overfitting on individual game results.
             # Hopefully lowering the loss weight helps.
-            loss_weights=[1.0, 0.1],
+            loss_weights=[1.0, 0.1])
+        self._model.fit(
+            X, [y_policy, y_value],
             batch_size=batch_size,
             epochs=1)
 
