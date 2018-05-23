@@ -8,12 +8,22 @@ import badukai
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--game-record-out', '-o')
+    parser.add_argument('--black-options', '-b')
+    parser.add_argument('--white-options', '-w')
     parser.add_argument('black_bot')
     parser.add_argument('white_bot')
     args = parser.parse_args()
 
     black_bot = badukai.bots.load_bot(args.black_bot)
+    if args.black_options:
+        black_options = badukai.options.parse(args.black_options)
+        for k, v in black_options.items():
+            black_bot.set_option(k, v)
     white_bot = badukai.bots.load_bot(args.white_bot)
+    if args.white_options:
+        white_options = badukai.options.parse(args.white_options)
+        for k, v in white_options.items():
+            white_bot.set_option(k, v)
     players = {
         baduk.Player.black: black_bot,
         baduk.Player.white: white_bot,

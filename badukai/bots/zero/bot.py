@@ -163,8 +163,11 @@ class ZeroBot(Bot):
     def board_size(self):
         return self._board_size
 
-    def set_num_rollouts(self, num_rollouts):
-        self._num_rollouts = num_rollouts
+    def set_option(self, name, value):
+        if name == 'num_rollouts':
+            self._num_rollouts = int(value)
+        else:
+            raise KeyError(name)
 
     def set_temperature(self, temperature):
         self._temperature = temperature

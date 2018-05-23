@@ -20,3 +20,6 @@ class Bot(object):
 
     def serialize(self, h5group):
         """Serialize the bot to an HDF5 group."""
+
+    def set_option(self, name, value):
+        """Set an engine-specific option"""
