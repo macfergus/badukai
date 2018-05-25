@@ -1,42 +1,15 @@
 import sys
-from collections import namedtuple
+
+from . import command
 
 __all__ = [
-    'BotRunner',
+    'Runner',
 ]
 
 
-class UnknownCommandError(Exception):
-    pass
-
-
-class Command(namedtuple('Command', 'id body')):
-    pass
-
-
-class CommandBody:
-    def __init__(self, name, args):
-        self.name = name
-        self.args = args
-
-
-class Response:
-    def __init__(self, success, content):
-        self.success = success
-        self.content = content
-
-
-def success(content):
-    return Response(True, content)
-
-
-def failure(content):
-    return Response(False, content)
-
-
-class BotRunner:
-    def __init__(self, bot, inf=None, outf=None):
-        self.bot = bot
+class Runner:
+    def __init__(self, handler, inf=None, outf=None):
+        self.handler = handler
 
         if inf:
             self.inf = inf
@@ -48,20 +21,18 @@ class BotRunner:
         else:
             self.outf = sys.stdout
 
-        self.should_quit = False
-
     def run_forever(self):
-        while not self.should_quit:
-            command = self.parse_command()
-            response = self.handle_command(command.body)
-            self.send_response(command.id, response)
+        while not self.handler.is_done:
+            cmd = self.parse_command()
+            response = self.dispatch_command(cmd.body)
+            self.send_response(cmd.id, response)
 
-    def handle_command(self, command):
+    def dispatch_command(self, cmd):
         try:
-            handler = self.get_handler(command.name)
-            return handler(command)
-        except UnknownCommandError:
-            return failure('unknown command')
+            handler = self.get_handler(cmd.name)
+            return handler(cmd)
+        except command.UnknownCommandError:
+            return command.failure('unknown command')
 
     def parse_command(self):
         text = self.inf.readline()
@@ -72,21 +43,16 @@ class BotRunner:
             pieces = pieces[1:]
         name = pieces[0]
         args = pieces[1:]
-        return Command(command_id, CommandBody(name, args))
+        return command.Command(command_id, command.Body(name, args))
 
     def get_handler(self, name):
         method_name = 'handle_{}'.format(name)
-        if not hasattr(self, method_name):
-            raise UnknownCommandError(name)
-        return getattr(self, method_name)
+        if not hasattr(self.handler, method_name):
+            raise command.UnknownCommandError(name)
+        return getattr(self.handler, method_name)
 
     def send_response(self, response_id, response):
         self.outf.write('{indicator}{response_id} {result}\n\n'.format(
             indicator='=' if response.success else '?',
             response_id='' if response_id is None else response_id,
             result=response.content))
-
-    def handle_quit(self, _):
-        self.should_quit = True
-        return success('bye!')
-

@@ -15,7 +15,7 @@ def main():
         for k, v in options.items():
             bot.set_option(k, v)
 
-    runner = badukai.gtp.BotRunner(bot)
+    runner = badukai.gtp.Runner(badukai.gtp.BotHandler(bot))
     runner.run_forever()
 
 
