@@ -1,4 +1,5 @@
 import sys
+from inspect import signature
 
 from . import command
 
@@ -30,7 +31,12 @@ class Runner:
     def dispatch_command(self, cmd):
         try:
             handler = self.get_handler(cmd.name)
-            return handler(cmd)
+            # Check if the call is possible.
+            try:
+                signature(handler).bind(*cmd.args)
+            except TypeError:
+                return command.failure('wrong args: {}'.format(cmd.args))
+            return handler(*cmd.args)
         except command.UnknownCommandError:
             return command.failure('unknown command')
 

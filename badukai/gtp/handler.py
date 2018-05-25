@@ -10,6 +10,6 @@ class BotHandler:
         self.is_done = False
         self.bot = bot
 
-    def handle_quit(self, _):
+    def handle_quit(self):
         self.is_done = True
         return success('bye!')
