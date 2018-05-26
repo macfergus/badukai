@@ -25,6 +25,8 @@ class Runner:
     def run_forever(self):
         while not self.handler.is_done:
             cmd = self.parse_command()
+            if cmd is None:
+                continue
             response = self.dispatch_command(cmd.body)
             self.send_response(cmd.id, response)
 
@@ -44,6 +46,8 @@ class Runner:
         text = self.inf.readline()
         pieces = text.strip().split()
         command_id = None
+        if not pieces:
+            return None
         if pieces[0].isdigit():
             command_id = pieces[0]
             pieces = pieces[1:]
@@ -62,3 +66,4 @@ class Runner:
             indicator='=' if response.success else '?',
             response_id='' if response_id is None else response_id,
             result=response.content))
+        self.outf.flush()
