@@ -42,6 +42,15 @@ class BotHandler:
         self.game = baduk.GameState.from_board(
             self.board, baduk.Player.black, self.komi)
 
+    def get_handlers(self):
+        known_commands = []
+        for attr in dir(self):
+            if attr.startswith('handle_'):
+                cmd_name = attr[7:]
+                known_commands.append(cmd_name)
+        known_commands.sort()
+        return known_commands
+
     def handle_quit(self):
         self.is_done = True
         return success('bye!')
@@ -56,7 +65,11 @@ class BotHandler:
         return success('2')
 
     def handle_list_commands(self):
-        return success('some')
+        return success('\n'.join(self.get_handlers()))
+
+    def handle_known_command(self, command_name):
+        is_known = command_name in self.get_handlers()
+        return success('true' if is_known else 'false')
 
     def handle_komi(self, komi):
         self.komi = float(komi)
