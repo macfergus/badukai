@@ -8,11 +8,31 @@ from .command import failure, success
 
 COLS = 'ABCDEFGHJKLMNOPQRSTUVWXYZ'
 
+HANDICAP_STONES = {
+    2: ['D4', 'Q16'],
+    3: ['D4', 'Q16', 'D16'],
+    4: ['D4', 'Q16', 'D16', 'Q4'],
+    5: ['D4', 'Q16', 'D16', 'Q4', 'K10'],
+    6: ['D4', 'Q16', 'D16', 'Q4', 'D10', 'Q10'],
+    7: ['D4', 'Q16', 'D16', 'Q4', 'D10', 'Q10', 'K10'],
+    8: ['D4', 'Q16', 'D16', 'Q4', 'D10', 'Q10', 'K4', 'K16'],
+    9: ['D4', 'Q16', 'D16', 'Q4', 'D10', 'Q10', 'K4', 'K16', 'K10'],
+}
+
 
 def parse_gtp_coords(gtp_coords):
     col = COLS.index(gtp_coords[0]) + 1
     row = int(gtp_coords[1:])
     return baduk.Point(row, col)
+
+
+def parse_gtp_move(gtp_move):
+    if gtp_move.lower == 'pass':
+        return baduk.Move.pass_turn()
+    if gtp_move.lower == 'resign':
+        return baduk.Move.resign()
+    point = parse_gtp_coords(gtp_move)
+    return baduk.Move.play(point)
 
 
 def parse_gtp_color(color):
@@ -92,16 +112,28 @@ class BotHandler:
 
     def handle_play(self, color, coords):
         player = parse_gtp_color(color)
-        point = parse_gtp_coords(coords)
+        move = parse_gtp_move(coords)
         if player != self.game.next_player:
-            return failure('wrong player')
-        self.game = self.game.apply_move(baduk.Move(point))
+            # Pretend there was a pass :\
+            self.game = self.game.apply_move(baduk.Move.pass_turn())
+        self.game = self.game.apply_move(move)
         return success('ok')
 
     def handle_genmove(self, color):
         player = parse_gtp_color(color)
         if player != self.game.next_player:
-            return failure('wrong player')
+            # Pretend there was a pass :\
+            self.game = self.game.apply_move(baduk.Move.pass_turn())
         move = self.bot.select_move(self.game)
         self.game = self.game.apply_move(move)
         return success(encode_gtp_move(move))
+
+    def handle_fixed_handicap(self, num_stones):
+        num_stones = int(num_stones)
+        stones = HANDICAP_STONES[num_stones]
+        for gtp_point in stones:
+            point = parse_gtp_coords(gtp_point)
+            self.board.place_stone(baduk.Player.black, point)
+        self.game = baduk.GameState.from_board(
+            self.board, baduk.Player.white, self.komi)
+        return success('ok')
