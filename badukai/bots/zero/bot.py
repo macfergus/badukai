@@ -46,6 +46,17 @@ class Branch(object):
         self.total_value = 0.0
         # Number of rollouts that passed through this node
         self.visit_count = 0
+        # Used for adding variety during parallel searches
+        self.virtual_losses = 0
+
+    def __str__(self):
+        return 'P {} Q {} N {} virtual {}'.format(
+            self.prior,
+            'NaN' if self.visit_count == 0 else \
+                self.total_value / self.visit_count,
+            self.visit_count,
+            self.virtual_losses)
+
 
 
 class Node(object):
@@ -58,6 +69,7 @@ class Node(object):
 
         self.visit_count = 1
         self.total_value = self.value
+        self.virtual_losses = 0
 
         self.branches = {}
         for move in self.state.legal_moves():
@@ -70,20 +82,27 @@ class Node(object):
         if parent:
             parent.add_child(last_move, self)
 
+    def total_visits(self):
+        return self.visit_count + self.virtual_losses
+
+    def add_virtual_loss(self, move):
+        self.virtual_losses += 1
+        self.branches[move].virtual_losses += 1
+
     def add_child(self, move, child_node):
         self.children[move] = child_node
 
     def expected_value(self, move):
         branch = self.branches[move]
-        if branch.visit_count == 0:
+        visits = branch.visit_count + branch.virtual_losses
+        if visits == 0:
             return self.value
-        return branch.total_value / branch.visit_count
+        return (branch.total_value - branch.virtual_losses) / visits
 
     def uct_score(self, move):
         branch = self.branches[move]
-        return branch.prior * (
-            math.sqrt(self.visit_count) /
-            (1 + branch.visit_count))
+        visits = branch.visit_count + branch.virtual_losses
+        return branch.prior * (math.sqrt(self.total_visits()) / (1 + visits))
 
     def has_child(self, move):
         """Return True if the move has been added as a child."""
@@ -111,6 +130,9 @@ class Node(object):
         self.branches[child_move].total_value += our_value
         if self.parent is not None:
             self.parent.record_visit(self.move, our_value)
+        # Reset virtual losses after recording a real visit.
+        self.branches[child_move].virtual_losses = 0
+        self.virtual_losses = 0
 
 
 class ZeroBot(Bot):
@@ -121,6 +143,7 @@ class ZeroBot(Bot):
         self._num_rollouts = 900
         self._temperature = 0.0
         self._exploration_factor = 2.0
+        self._batch_size = 8
         self.root = None
 
         self._noise_concentration = 0.03
@@ -137,6 +160,8 @@ class ZeroBot(Bot):
             self._num_rollouts = int(value)
         elif name == 'exploration':
             self._exploration_factor = float(value)
+        elif name == 'batch_size':
+            self._batch_size = int(value)
         else:
             raise KeyError(name)
 
@@ -146,16 +171,30 @@ class ZeroBot(Bot):
     def select_move(self, game_state):
         self.root = self.create_node(game_state, add_noise=True)
 
-        for i in range(self._num_rollouts):
-            # Find a leaf.
-            node = self.root
-            path = []
-            move = self.select_branch(node)
-            path.append(move)
-            while node.has_child(move):
-                node = node.get_child(move)
+        num_rollouts = 0
+        while num_rollouts < self._num_rollouts:
+            to_expand = []
+            for i in range(self._batch_size):
+                # Find a leaf.
+                node = self.root
+                path = []
                 move = self.select_branch(node)
                 path.append(move)
+                while node.has_child(move):
+                    node.add_virtual_loss(move)
+                    node = node.get_child(move)
+                    move = self.select_branch(node)
+                    path.append(move)
+                node.add_virtual_loss(move)
+                to_expand.append((node, move))
+                print('Path {}: selected {}'.format(
+                    i,
+                    ' '.join(format_move(move) for move in path)))
+
+            new_children = self.create_children(to_expand)
+            for new_child in new_children:
+                new_child.parent.record_visit(
+                    new_child.move, new_child.value)
 
             # Expand the tree.
             new_child = self.create_child(node, move)
@@ -163,11 +202,17 @@ class ZeroBot(Bot):
             # Update stats.
             node.record_visit(move, new_child.value)
 
+            num_rollouts += self._batch_size
+
         # Now select a move in proportion to how often we visited it.
         move_indices = []
         visit_counts = []
         for child in self.root.get_children():
             if child.visit_count > 0:
+                print('{}: {} {}'.format(
+                    child.move,
+                    self.root.expected_value(child.move),
+                    self.root.num_visits(child.move)))
                 move_indices.append(self._encoder.encode_move(child.move))
                 visit_counts.append(child.visit_count)
         visit_counts = np.array(visit_counts)
@@ -179,6 +224,33 @@ class ZeroBot(Bot):
             move_index = move_indices[np.argmax(visit_counts)]
 
         return self._encoder.decode_move_index(move_index)
+
+    def create_children(self, pairs):
+        states = []
+        state_tensors = []
+        for parent, move in pairs:
+            next_state = parent.state.apply_move(move)
+            states.append(next_state)
+            state_tensors.append(self._encoder.encode(next_state))
+        state_tensors = np.array(state_tensors)
+
+        probs, values = self._model.predict(state_tensors)
+
+        new_nodes = []
+        for i, (parent, move) in enumerate(pairs):
+            move_probs = probs[i]
+            value = values[i][0]
+            priors = {}
+            for j, p in enumerate(move_probs):
+                priors[self._encoder.decode_move_index(j)] = p
+
+            new_node = Node(
+                states[i],
+                value,
+                priors,
+                last_move=move, parent=parent)
+            new_nodes.append(new_node)
+        return new_nodes
 
     def create_child(self, parent, move):
         new_state = parent.state.apply_move(move)
@@ -210,7 +282,6 @@ class ZeroBot(Bot):
         return new_node
 
     def select_branch(self, node):
-        scored_branches = []
         def branch_score(move):
             return node.expected_value(move) + \
                 self._exploration_factor * node.uct_score(move)

@@ -40,21 +40,11 @@ def load_model_from_hdf5_group(f, custom_objects=None):
         os.unlink(tempfname)
 
 
-def set_gpu_memory_target(frac):
-    """Configure Tensorflow to use a fraction of available GPU memory.
-
-    Use this for evaluating models in parallel. By default, Tensorflow
-    will try to map all available GPU memory in advance. You can
-    configure to use just a fraction so that multiple processes can run
-    in parallel. For example, if you want to use 2 works, set the
-    memory fraction to 0.5.
-
-    If you are using Python multiprocessing, you must call this function
-    from the *worker* process (not from the parent).
-
-    This function does nothing if Keras is using a backend other than
-    Tensorflow.
-    """
+def set_tf_options(
+        gpu_frac=None,
+        inter_op_parallelism_threads=None,
+        intra_op_parallelism_threads=None):
+    """Set Tensorflow options."""
     if keras.backend.backend() != 'tensorflow':
         return
     # Do the import here, not at the top, in case Tensorflow is not
@@ -62,5 +52,10 @@ def set_gpu_memory_target(frac):
     import tensorflow as tf
     from keras.backend.tensorflow_backend import set_session
     config = tf.ConfigProto()
-    config.gpu_options.per_process_gpu_memory_fraction = frac
+    if gpu_frac is not None:
+        config.gpu_options.per_process_gpu_memory_fraction = frac
+    if inter_op_parallelism_threads is not None:
+        config.inter_op_parallelism_threads = inter_op_parallelism_threads
+    if intra_op_parallelism_threads is not None:
+        config.intra_op_parallelism_threads = intra_op_parallelism_threads
     set_session(tf.Session(config=config))
