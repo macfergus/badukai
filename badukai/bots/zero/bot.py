@@ -210,7 +210,7 @@ class ZeroBot(Bot):
         for child in self.root.get_children():
             if child.visit_count > 0:
                 print('{}: {} {}'.format(
-                    child.move,
+                    format_move(child.move),
                     self.root.expected_value(child.move),
                     self.root.num_visits(child.move)))
                 move_indices.append(self._encoder.encode_move(child.move))
