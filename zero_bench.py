@@ -17,6 +17,7 @@ def main():
         for k, v in options.items():
             bot.set_option(k, v)
     num_rollouts = 256
+    bot.set_option('num_rollouts', num_rollouts)
 
     board_size = bot.board_size()
     game = baduk.GameState.new_game(board_size)

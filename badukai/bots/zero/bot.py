@@ -82,6 +82,12 @@ class Node(object):
         if parent:
             parent.add_child(last_move, self)
 
+    def __hash__(self):
+        return hash(id(self)) # HACK
+
+    def __eq__(self, other):
+        return self is other # HACK
+
     def total_visits(self):
         return self.visit_count + self.virtual_losses
 
@@ -173,35 +179,22 @@ class ZeroBot(Bot):
 
         num_rollouts = 0
         while num_rollouts < self._num_rollouts:
-            to_expand = []
-            for i in range(self._batch_size):
+            to_expand = set()
+            while len(to_expand) < self._batch_size:
                 # Find a leaf.
                 node = self.root
-                path = []
                 move = self.select_branch(node)
-                path.append(move)
                 while node.has_child(move):
                     node.add_virtual_loss(move)
                     node = node.get_child(move)
                     move = self.select_branch(node)
-                    path.append(move)
                 node.add_virtual_loss(move)
-                to_expand.append((node, move))
-                print('Path {}: selected {}'.format(
-                    i,
-                    ' '.join(format_move(move) for move in path)))
+                to_expand.add((node, move))
 
             new_children = self.create_children(to_expand)
             for new_child in new_children:
                 new_child.parent.record_visit(
                     new_child.move, new_child.value)
-
-            # Expand the tree.
-            new_child = self.create_child(node, move)
-
-            # Update stats.
-            node.record_visit(move, new_child.value)
-
             num_rollouts += self._batch_size
 
         # Now select a move in proportion to how often we visited it.
