@@ -21,24 +21,24 @@ HANDICAP_STONES = {
 
 
 def parse_gtp_coords(gtp_coords):
-    col = COLS.index(gtp_coords[0]) + 1
+    col = COLS.index(gtp_coords.upper()[0]) + 1
     row = int(gtp_coords[1:])
     return baduk.Point(row, col)
 
 
 def parse_gtp_move(gtp_move):
-    if gtp_move.lower == 'pass':
+    if gtp_move.lower() == 'pass':
         return baduk.Move.pass_turn()
-    if gtp_move.lower == 'resign':
+    if gtp_move.lower() == 'resign':
         return baduk.Move.resign()
     point = parse_gtp_coords(gtp_move)
     return baduk.Move.play(point)
 
 
 def parse_gtp_color(color):
-    if color.lower() == 'b':
+    if color.lower().startswith('b'):
         return baduk.Player.black
-    if color.lower() == 'w':
+    if color.lower().startswith('w'):
         return baduk.Player.white
     raise ValueError(color)
 
@@ -136,4 +136,21 @@ class BotHandler:
             self.board.place_stone(baduk.Player.black, point)
         self.game = baduk.GameState.from_board(
             self.board, baduk.Player.white, self.komi)
+        return success('ok')
+
+    def handle_set_free_handicap(self, *stones):
+        for gtp_point in stones:
+            point = parse_gtp_coords(gtp_point)
+            self.board.place_stone(baduk.Player.black, point)
+        self.game = baduk.GameState.from_board(
+            self.board, baduk.Player.white, self.komi)
+        return success('ok')
+
+    def handle_showboard(self):
+        return success('')
+
+    def handle_time_settings(self, main, byoyomi, num_stones):
+        return success('ok')
+
+    def handle_time_left(self, color, main, num_stones):
         return success('ok')

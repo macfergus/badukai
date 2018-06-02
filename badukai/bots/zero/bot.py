@@ -1,10 +1,11 @@
 import math
 import random
+import sys
 from operator import attrgetter, itemgetter
 
 import numpy as np
 from keras.optimizers import Adadelta, SGD
-from baduk import GameState
+from baduk import GameState, Move
 
 from ... import encoders
 from ... import kerasutil
@@ -150,6 +151,7 @@ class ZeroBot(Bot):
         self._temperature = 0.0
         self._exploration_factor = 2.0
         self._batch_size = 8
+        self._resign_below = -2.0
         self.root = None
 
         self._noise_concentration = 0.03
@@ -168,6 +170,10 @@ class ZeroBot(Bot):
             self._exploration_factor = float(value)
         elif name == 'batch_size':
             self._batch_size = int(value)
+        elif name == 'temperature':
+            self._temperature = float(value)
+        elif name == 'resign_below':
+            self._resign_below = float(value)
         else:
             raise KeyError(name)
 
@@ -202,7 +208,7 @@ class ZeroBot(Bot):
         visit_counts = []
         for child in self.root.get_children():
             if child.visit_count > 0:
-                print('{}: {} {}'.format(
+                sys.stderr.write('{}: {:.3f} {}\n'.format(
                     format_move(child.move),
                     self.root.expected_value(child.move),
                     self.root.num_visits(child.move)))
@@ -216,7 +222,14 @@ class ZeroBot(Bot):
         else:
             move_index = move_indices[np.argmax(visit_counts)]
 
-        return self._encoder.decode_move_index(move_index)
+        chosen_move = self._encoder.decode_move_index(move_index)
+        sys.stderr.write('Select {} Q {:.3f}\n'.format(
+            format_move(chosen_move),
+            self.root.expected_value(chosen_move)))
+        sys.stderr.flush()
+        if self.root.expected_value(chosen_move) < self._resign_below:
+            return Move.resign()
+        return chosen_move
 
     def create_children(self, pairs):
         states = []

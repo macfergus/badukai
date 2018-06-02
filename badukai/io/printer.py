@@ -22,5 +22,21 @@ class AsciiBoardPrinter(object):
             print('%2d %s' % (row, ''.join(line)))
         print('   ' + COLS[:board.num_cols])
 
+    def format_move(self, move):
+        if move.is_resign:
+            return 'resign'
+        if move.is_pass:
+            return 'pass'
+        return '{}{}'.format(
+            COLS[move.point.col - 1],
+            move.point.row)
+
+    def format_player(self, player):
+        if player == baduk.Player.black:
+            return 'B'
+        if player == baduk.Player.white:
+            return 'W'
+        raise ValueError(player)
+
     def print_result(self, result):
         print(str(result))

@@ -62,6 +62,7 @@ class Runner:
         return getattr(self.handler, method_name)
 
     def send_response(self, response_id, response):
+        self.outf.flush()
         self.outf.write('{indicator}{response_id} {result}\n\n'.format(
             indicator='=' if response.success else '?',
             response_id='' if response_id is None else response_id,
