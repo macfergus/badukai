@@ -5,5 +5,6 @@ from . import gtp
 from . import io
 from . import kerasutil
 from . import networks
+from . import ogs
 from . import options
 from . import scoring

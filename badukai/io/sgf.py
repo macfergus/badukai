@@ -28,6 +28,7 @@ def decode_sgf_move(sgf_move, num_rows):
 
 
 def save_game_as_sgf(outf, game, game_result,
+                     handicap_stones=[],
                      black_name=None,
                      white_name=None,
                      date=None,
@@ -45,6 +46,10 @@ def save_game_as_sgf(outf, game, game_result,
         outf.write('DT[{}]'.format(date.strftime('%Y-%m-%d')))
     if komi:
         outf.write('KM[{}]'.format(komi))
+    if handicap_stones:
+        outf.write('AB{}'.format(''.join(
+            '[' + point_to_sgf(stone, num_rows) + ']'
+            for stone in handicap_stones)))
     moves = []
     while game.previous_state is not None:
         moves.append((game.previous_state.next_player, game.last_move))
