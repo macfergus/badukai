@@ -4,7 +4,7 @@ from urllib.parse import urlparse, urlunparse
 
 import requests
 
-from ..io import get_input
+from ..io import get_input, open_output
 
 __all__ = [
     'AuthorizationError',
@@ -95,10 +95,10 @@ def get_client(base_url, auth_file, secrets):
                 'grant_type': 'refresh_token',
             }
         )
-        if resp.status_code >= 300:
+        if response.status_code >= 300:
             raise AuthorizationError(
-                'Could not refresh token: {}'.format(status_code))
-        new_creds = resp.json()
+                'Could not refresh token: {}'.format(response.status_code))
+        new_creds = response.json()
         token = new_creds['access_token']
         with open_output(auth_file) as auth_outf:
             json.dump(new_creds, auth_outf)
