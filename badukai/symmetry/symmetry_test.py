@@ -32,3 +32,28 @@ class SymmetryTest(unittest.TestCase):
         self.assertEqual(baduk.Player.black, rotated.get(baduk.Point(3, 3)))
         self.assertEqual(baduk.Player.white, rotated.get(baduk.Point(3, 2)))
         self.assertEqual(baduk.Player.black, rotated.get(baduk.Point(2, 2)))
+
+    def test_rotate_game_record(self):
+         # Handicap-ish setup
+        board = baduk.Board(5, 5)
+        board.place_stone(baduk.Player.black, baduk.Point(2, 2))
+        board.place_stone(baduk.Player.black, baduk.Point(2, 4))
+        game = baduk.GameState.from_board(board, baduk.Player.white)
+        game = game.apply_move(baduk.Move.play(baduk.Point(4, 3)))
+
+        # 1 == Reflect rows
+        rot_game = symmetry.rotate_game_record(game, 1)
+        self.assertEqual(
+            baduk.Move.play(baduk.Point(2, 3)),
+            rot_game.last_move)
+        rot_board = rot_game.board
+        self.assertEqual(baduk.Player.black, rot_board.get(baduk.Point(4, 2)))
+        self.assertEqual(baduk.Player.black, rot_board.get(baduk.Point(4, 4)))
+        self.assertEqual(baduk.Player.white, rot_board.get(baduk.Point(2, 3)))
+
+        rot_game = rot_game.previous_state
+        self.assertIsNone(rot_game.last_move)
+        rot_board = rot_game.board
+        self.assertEqual(baduk.Player.black, rot_board.get(baduk.Point(4, 2)))
+        self.assertEqual(baduk.Player.black, rot_board.get(baduk.Point(4, 4)))
+        self.assertIsNone(rot_board.get(baduk.Point(2, 3)))
