@@ -6,8 +6,14 @@ import badukai
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--bot-options', '-o')
+    parser.add_argument('--max-threads', '-t', type=int)
     parser.add_argument('bot')
     args = parser.parse_args()
+
+    if args.max_threads:
+        badukai.kerasutil.set_tf_options(
+            inter_op_parallelism_threads=args.max_threads,
+            intra_op_parallelism_threads=args.max_threads)
 
     bot = badukai.bots.load_bot(args.bot)
     if args.bot_options:
