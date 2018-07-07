@@ -8,3 +8,4 @@ from . import networks
 from . import ogs
 from . import options
 from . import scoring
+from . import selfplay

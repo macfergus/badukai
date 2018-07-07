@@ -231,6 +231,11 @@ class ZeroBot(Bot):
             return Move.resign()
         return chosen_move
 
+    def evaluate(self, game_state):
+        state_tensor = self._encoder.encode(game_state)
+        _, values = self._model.predict(np.array([state_tensor]))
+        return values[0][0]
+
     def create_children(self, pairs):
         states = []
         state_tensors = []

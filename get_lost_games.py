@@ -98,6 +98,7 @@ def main():
                         outf,
                         g,
                         'B+?' if i_was_white else 'W+?',
+                        komi=komi,
                         handicap_stones=handicap_stones)
     print('Total: {} losses'.format(total))
     print(opponents)

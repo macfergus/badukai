@@ -47,6 +47,7 @@ def save_game_as_sgf(outf, game, game_result,
     if komi:
         outf.write('KM[{}]'.format(komi))
     if handicap_stones:
+        outf.write('HA[{}]'.format(len(handicap_stones)))
         outf.write('AB{}'.format(''.join(
             '[' + point_to_sgf(stone, num_rows) + ']'
             for stone in handicap_stones)))

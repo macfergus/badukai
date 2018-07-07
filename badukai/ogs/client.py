@@ -19,7 +19,7 @@ class AuthorizationError(Exception):
 
 
 class OGSClient:
-    def __init__(self, base_url, token, rate_limit=2.0):
+    def __init__(self, base_url, token, rate_limit=3.0):
         self.base_url = urlparse(base_url)
         self.token = token
         self.last_request = 0.0
