@@ -39,46 +39,21 @@ def print_tree(node, indent=''):
         print_tree(child_node, indent + '  ')
 
 
-class Branch(object):
-    def __init__(self, prior):
-        # Prior probability of visiting this node from policy network
-        self.prior = prior
-        # Sum of estimated values over all visits
-        self.total_value = 0.0
-        # Number of rollouts that passed through this node
-        self.visit_count = 0
-        # Used for adding variety during parallel searches
-        self.virtual_losses = 0
-
-    def __str__(self):
-        return 'P {} Q {} N {} virtual {}'.format(
-            self.prior,
-            'NaN' if self.visit_count == 0 else \
-                self.total_value / self.visit_count,
-            self.visit_count,
-            self.virtual_losses)
-
-
-
 class Node(object):
-    def __init__(self, state, value, priors, last_move=None, parent=None):
+    def __init__(self, state, value, priors, legal_moves,
+                 last_move=None, parent=None):
+        self.priors = priors
+        self.visit_counts = np.zeros_like(priors)
+        self.virtual_losses = np.zeros_like(priors)
+        self.total_values = np.zeros_like(priors)
+        self.is_legal = legal_moves
+        self.children = [None for _ in priors]
+
         self.state = state
         self.value = value
 
         self.move = last_move
         self.parent = parent
-
-        self.visit_count = 1
-        self.total_value = self.value
-        self.virtual_losses = 0
-
-        self.branches = {}
-        for move in self.state.legal_moves():
-            if not move.is_resign:
-                prior = priors[move]
-                self.branches[move] = Branch(prior)
-
-        self.children = {}
 
         if parent:
             parent.add_child(last_move, self)
@@ -89,57 +64,29 @@ class Node(object):
     def __eq__(self, other):
         return self is other # HACK
 
-    def total_visits(self):
-        return self.visit_count + self.virtual_losses
-
     def add_virtual_loss(self, move):
-        self.virtual_losses += 1
-        self.branches[move].virtual_losses += 1
+        self.virtual_losses[move] += 1
 
     def add_child(self, move, child_node):
         self.children[move] = child_node
 
-    def expected_value(self, move):
-        branch = self.branches[move]
-        visits = branch.visit_count + branch.virtual_losses
-        if visits == 0:
-            return self.value
-        return (branch.total_value - branch.virtual_losses) / visits
-
-    def uct_score(self, move):
-        branch = self.branches[move]
-        visits = branch.visit_count + branch.virtual_losses
-        return branch.prior * (math.sqrt(self.total_visits()) / (1 + visits))
-
     def has_child(self, move):
         """Return True if the move has been added as a child."""
-        return move in self.children
+        return self.children[move] is not None
 
     def get_child(self, move):
         return self.children[move]
-
-    def num_visits(self, move):
-        if move in self.children:
-            return self.children[move].visit_count
-        return 0
-
-    def get_children(self):
-        # Make a copy
-        return list(self.children.values())
 
     def record_visit(self, child_move, value):
         # The param value is from the point of view of the next state,
         # i.e., the opponent. So we invert.
         our_value = -1 * value
-        self.visit_count += 1
-        self.total_value += our_value
-        self.branches[child_move].visit_count += 1
-        self.branches[child_move].total_value += our_value
+        self.visit_counts[child_move] += 1
+        self.total_values[child_move] += our_value
         if self.parent is not None:
             self.parent.record_visit(self.move, our_value)
         # Reset virtual losses after recording a real visit.
-        self.branches[child_move].virtual_losses = 0
-        self.virtual_losses = 0
+        self.virtual_losses[:] = 0
 
 
 class ZeroBot(Bot):
@@ -204,30 +151,33 @@ class ZeroBot(Bot):
             num_rollouts += self._batch_size
 
         # Now select a move in proportion to how often we visited it.
-        move_indices = []
-        visit_counts = []
-        for child in self.root.get_children():
-            if child.visit_count > 0:
+        visit_counts = self.root.visit_counts
+        expected_values = self.root.total_values / visit_counts
+        for move_idx in np.argsort(visit_counts):
+            visit_count = visit_counts[move_idx]
+            if visit_count > 0:
                 sys.stderr.write('{}: {:.3f} {}\n'.format(
-                    format_move(child.move),
-                    self.root.expected_value(child.move),
-                    self.root.num_visits(child.move)))
-                move_indices.append(self._encoder.encode_move(child.move))
-                visit_counts.append(child.visit_count)
-        visit_counts = np.array(visit_counts)
+                    format_move(self._encoder.decode_move_index(move_idx)),
+                    expected_values[move_idx],
+                    visit_count))
         if self._temperature > 0:
-            p = np.power(visit_counts, 1.0 / self._temperature)
+            move_indices, = np.where(visit_counts > 0)
+            raw_counts = visit_counts[move_indices]
+            p = np.power(raw_counts, 1.0 / self._temperature)
             p /= np.sum(p)
             move_index = np.random.choice(move_indices, p=p)
         else:
-            move_index = move_indices[np.argmax(visit_counts)]
+            move_index = np.argmax(visit_counts)
 
         chosen_move = self._encoder.decode_move_index(move_index)
         sys.stderr.write('Select {} Q {:.3f}\n'.format(
             format_move(chosen_move),
-            self.root.expected_value(chosen_move)))
+            expected_values[move_index]))
         sys.stderr.flush()
-        if self.root.expected_value(chosen_move) < self._resign_below:
+        if expected_values[move_index] < self._resign_below:
+            sys.stderr.write('Resigning because Q {:.3f} < {:.3f}\n'.format(
+                expected_values[move_index],
+                self._resign_below))
             return Move.resign()
         return chosen_move
 
@@ -239,7 +189,8 @@ class ZeroBot(Bot):
     def create_children(self, pairs):
         states = []
         state_tensors = []
-        for parent, move in pairs:
+        for parent, move_idx in pairs:
+            move = self._encoder.decode_move_index(move_idx)
             next_state = parent.state.apply_move(move)
             states.append(next_state)
             state_tensors.append(self._encoder.encode(next_state))
@@ -248,24 +199,25 @@ class ZeroBot(Bot):
         probs, values = self._model.predict(state_tensors)
 
         new_nodes = []
-        for i, (parent, move) in enumerate(pairs):
+        for i, (parent, move_idx) in enumerate(pairs):
             move_probs = probs[i]
             value = values[i][0]
-            priors = {}
-            for j, p in enumerate(move_probs):
-                priors[self._encoder.decode_move_index(j)] = p
 
             new_node = Node(
                 states[i],
                 value,
-                priors,
-                last_move=move, parent=parent)
+                priors=move_probs,
+                legal_moves=self._legal_move_mask(states[i]),
+                last_move=move_idx, parent=parent)
             new_nodes.append(new_node)
         return new_nodes
 
-    def create_child(self, parent, move):
-        new_state = parent.state.apply_move(move)
-        return self.create_node(new_state, parent, move)
+    def _legal_move_mask(self, state):
+        legal_moves = np.zeros(self._encoder.num_moves())
+        for move in state.legal_moves():
+            if not move.is_resign:
+                legal_moves[self._encoder.encode_move(move)] = 1
+        return legal_moves
 
     def create_node(self, state, parent=None, move=None, add_noise=False):
         state_tensor = self._encoder.encode(state)
@@ -281,22 +233,37 @@ class ZeroBot(Bot):
                 self._noise_weight * noise
 
         value = values[0][0]
-        priors = {}
-        for i, p in enumerate(probs):
-            priors[self._encoder.decode_move_index(i)] = p
+
+        move_idx = None if move is None \
+            else self._encoder.encode_move(move)
 
         new_node = Node(
             state,
             value,
-            priors,
-            last_move=move, parent=parent)
+            priors=probs,
+            legal_moves=self._legal_move_mask(state),
+            last_move=move_idx,
+            parent=parent)
         return new_node
 
     def select_branch(self, node):
-        def branch_score(move):
-            return node.expected_value(move) + \
-                self._exploration_factor * node.uct_score(move)
-        return max(node.branches.keys(), key=branch_score)
+        visits = node.visit_counts + node.virtual_losses
+        expected_values = np.divide(
+            node.total_values,
+            visits,
+            out=np.zeros_like(node.total_values),
+            where=visits > 0)
+        
+        total_visits = np.sum(node.visit_counts) + np.sum(node.virtual_losses)
+        uct_scores = node.priors * np.sqrt(total_visits) / (1 + visits)
+
+        branch_scores = (
+            expected_values + self._exploration_factor * uct_scores)
+        # Avoid selecting illegal moves.
+        branch_scores[node.is_legal == 0] = np.min(branch_scores) - 1
+        to_select = np.argmax(branch_scores)
+        assert node.is_legal[to_select] > 0
+        return to_select
 
     def serialize(self, h5group):
         encoder_group = h5group.create_group('encoder')
@@ -306,11 +273,7 @@ class ZeroBot(Bot):
         kerasutil.save_model_to_hdf5_group(self._model, model_group)
 
     def search_counts(self):
-        rv = []
-        for idx in range(self._encoder.num_moves()):
-            move = self._encoder.decode_move_index(idx)
-            rv.append(self.root.num_visits(move))
-        return rv
+        return self.root.visit_counts
 
     def train(self, game_records, num_epochs=1):
         X = []

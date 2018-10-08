@@ -47,5 +47,8 @@ def build_index(bot, sgf_files):
     positions = []
     for i, sgf_filename in enumerate(sgf_files):
         print('Processing {} (game {})...'.format(sgf_filename, i + 1))
-        positions += extract_positions(bot, sgf_filename)
+        try:
+            positions += extract_positions(bot, sgf_filename)
+        except KeyError as e:
+            print('Could not process {}: {}'.format(sgf_filename, e))
     return LossIndex(positions)

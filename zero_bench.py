@@ -16,7 +16,7 @@ def main():
         options = badukai.options.parse(args.options)
         for k, v in options.items():
             bot.set_option(k, v)
-    num_rollouts = 256
+    num_rollouts = 16384
     bot.set_option('num_rollouts', num_rollouts)
 
     board_size = bot.board_size()

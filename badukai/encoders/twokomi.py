@@ -21,6 +21,11 @@ class TwoKomiEncoder(Encoder):
         # 4. 1 if opponent gets komi
         self.num_planes = 5
 
+        self._points = []
+        for r in range(self._board_size):
+            for c in range(self._board_size):
+                self._points.append(Point(row=r + 1, col=c + 1))
+
     def board_size(self):
         return self._board_size
 
@@ -36,19 +41,19 @@ class TwoKomiEncoder(Encoder):
             board_tensor[3] = 1
         elif komi < -4:
             board_tensor[4] = 1
-        for r in range(self._board_size):
-            for c in range(self._board_size):
-                p = Point(row=r + 1, col=c + 1)
-                go_string = game_state.board.get_string(p)
+        for p in self._points:
+            r = p.row - 1
+            c = p.col - 1
+            go_string = game_state.board.get_string(p)
 
-                if go_string is None:
-                    if game_state.does_move_violate_ko(Move.play(p)):
-                        board_tensor[2][r][c] = 1
-                else:
-                    plane = 1
-                    if go_string.color == game_state.next_player:
-                        plane = 0
-                    board_tensor[plane][r][c] = 1
+            if go_string is None:
+                if game_state.does_move_violate_ko(Move.play(p)):
+                    board_tensor[2][r][c] = 1
+            else:
+                plane = 1
+                if go_string.color == game_state.next_player:
+                    plane = 0
+                board_tensor[plane][r][c] = 1
 
         return board_tensor
 

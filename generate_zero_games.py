@@ -44,7 +44,20 @@ def record_game(black_bot, white_bot, bump_temp_before):
         printer.print_board(game.board)
         print('')
 
-    game_result = badukai.scoring.compute_game_result(game)
+    print('Removing dead stones...')
+    end_game = game
+    while end_game.last_move == baduk.Move.pass_turn():
+        end_game = end_game.previous_state
+    final_board = baduk.remove_dead_stones(end_game)
+    printer.print_board(final_board)
+    final_state = baduk.GameState.from_board(
+        final_board, 
+        game.next_player,
+        game.komi())
+    final_state = final_state.apply_move(baduk.Move.pass_turn())
+    final_state = final_state.apply_move(baduk.Move.pass_turn())
+
+    game_result = badukai.scoring.compute_game_result(final_state)
     printer.print_result(game_result)
     builder.record_result(game_result.winner)
     return builder.build()
@@ -67,8 +80,10 @@ def main():
         black_bot = badukai.bots.load_bot(bot_file)
         white_bot = badukai.bots.load_bot(bot_file)
 
-    black_bot.set_num_rollouts(args.rollouts_per_move)
-    white_bot.set_num_rollouts(args.rollouts_per_move)
+    black_bot.set_option('num_rollouts', args.rollouts_per_move)
+    white_bot.set_option('num_rollouts', args.rollouts_per_move)
+    black_bot.set_option('batch_size', 16)
+    white_bot.set_option('batch_size', 16)
 
     board_size = black_bot.board_size()
 
