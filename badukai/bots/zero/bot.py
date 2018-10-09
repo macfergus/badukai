@@ -96,7 +96,7 @@ class ZeroBot(Bot):
         self._board_size = encoder.board_size()
         self._num_rollouts = 900
         self._temperature = 0.0
-        self._exploration_factor = 2.0
+        self._exploration_factor = 1.25
         self._batch_size = 8
         self._resign_below = -2.0
         self.root = None

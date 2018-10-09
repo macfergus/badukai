@@ -44,20 +44,9 @@ def record_game(black_bot, white_bot, bump_temp_before):
         printer.print_board(game.board)
         print('')
 
-    print('Removing dead stones...')
-    end_game = game
-    while end_game.last_move == baduk.Move.pass_turn():
-        end_game = end_game.previous_state
-    final_board = baduk.remove_dead_stones(end_game)
-    printer.print_board(final_board)
-    final_state = baduk.GameState.from_board(
-        final_board, 
-        game.next_player,
-        game.komi())
-    final_state = final_state.apply_move(baduk.Move.pass_turn())
-    final_state = final_state.apply_move(baduk.Move.pass_turn())
-
-    game_result = badukai.scoring.compute_game_result(final_state)
+    game_result = badukai.scoring.remove_dead_stones_and_score(game)
+    print('GAME OVER')
+    printer.print_board(game_result.final_board)
     printer.print_result(game_result)
     builder.record_result(game_result.winner)
     return builder.build()

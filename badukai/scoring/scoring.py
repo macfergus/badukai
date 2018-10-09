@@ -1,11 +1,12 @@
 from collections import namedtuple
 
-from baduk import Player, Point
+from baduk import GameState, Move, Player, Point, remove_dead_stones
 
 
 __all__ = [
     'GameResult',
     'compute_game_result',
+    'remove_dead_stones_and_score',
 ]
 
 
@@ -31,7 +32,8 @@ class Territory(object):
                 self.dame_points.append(point)
 
 
-class GameResult(namedtuple('GameResult', 'b_resign w_resign b w komi')):
+class GameResult(namedtuple('GameResult',
+                            'b_resign w_resign b w komi final_board')):
     @property
     def winner(self):
         if self.b_resign:
@@ -131,4 +133,33 @@ def compute_game_result(game_state):
         w_resign,
         territory.num_black_territory + territory.num_black_stones,
         territory.num_white_territory + territory.num_white_stones,
-        komi=7.5)
+        komi=game_state.komi(),
+        final_board=game_state.board)
+
+
+def remove_dead_stones_and_score(game_state):
+    b_resign = False
+    w_resign = False
+    if game_state.last_move.is_resign:
+        if game_state.next_player == Player.black:
+            w_resign = True
+        else:
+            b_resign = True
+    
+    if b_resign or w_resign:
+        return GameResult(
+            b_resign, w_resign, 
+            0.0, 0.0,
+            game_state.komi(), game_state.board)
+
+    end_game = game_state
+    while end_game.last_move == Move.pass_turn():
+        end_game = end_game.previous_state
+    final_board = remove_dead_stones(end_game)
+    final_state = GameState.from_board(
+        final_board,
+        game_state.next_player,
+        game_state.komi())
+    final_state = final_state.apply_move(Move.pass_turn())
+    final_state = final_state.apply_move(Move.pass_turn())
+    return compute_game_result(final_state)

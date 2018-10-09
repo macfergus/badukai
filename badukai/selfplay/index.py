@@ -1,9 +1,11 @@
 import json
+import numpy as np
 
 from ..io import read_game_from_sgf
 
 __all__ = [
     'build_index',
+    'load_index',
 ]
 
 
@@ -13,6 +15,9 @@ class Position:
         self.move_num = move_num
         self.state = state
         self.error = error
+
+    def __str__(self):
+        return '{}:{} ({})'.format(self.source_file, self.move_num, self.error)
 
 
 def extract_positions(bot, sgf_file):
@@ -42,6 +47,13 @@ class LossIndex:
         } for pos in self.positions]
         json.dump(positions_json, outf)
 
+    def sample(self, temperature=1.0):
+        p = np.array([pos.error for pos in self.positions]) + 1e-4
+        p /= np.sum(p)
+        p = np.power(p, 1.0 / temperature)
+        p /= np.sum(p)
+        return np.random.choice(self.positions, p=p)
+
 
 def build_index(bot, sgf_files):
     positions = []
@@ -51,4 +63,15 @@ def build_index(bot, sgf_files):
             positions += extract_positions(bot, sgf_filename)
         except KeyError as e:
             print('Could not process {}: {}'.format(sgf_filename, e))
+    return LossIndex(positions)
+
+
+def load_index(indexfile):
+    positions_json = json.load(indexfile)
+    positions = [Position(
+        pos['source_file'],
+        pos['move_num'],
+        None,
+        pos['error']
+    ) for pos in positions_json]
     return LossIndex(positions)
