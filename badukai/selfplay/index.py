@@ -6,6 +6,7 @@ from ..io import read_game_from_sgf
 __all__ = [
     'build_index',
     'load_index',
+    'retrieve_game_state',
 ]
 
 
@@ -75,3 +76,11 @@ def load_index(indexfile):
         pos['error']
     ) for pos in positions_json]
     return LossIndex(positions)
+
+
+def retrieve_game_state(position):
+    record = read_game_from_sgf(open(position.source_file))
+    game = record.initial_state
+    for i in range(position.move_num + 1):
+        game = game.apply_move(record.moves[i])
+    return game

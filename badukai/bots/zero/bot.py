@@ -152,7 +152,11 @@ class ZeroBot(Bot):
 
         # Now select a move in proportion to how often we visited it.
         visit_counts = self.root.visit_counts
-        expected_values = self.root.total_values / visit_counts
+        expected_values = np.divide(
+            self.root.total_values,
+            visit_counts,
+            out=np.zeros_like(self.root.total_values),
+            where=visit_counts > 0)
         for move_idx in np.argsort(visit_counts):
             visit_count = visit_counts[move_idx]
             if visit_count > 0:
