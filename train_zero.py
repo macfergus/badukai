@@ -17,6 +17,7 @@ def main():
     with badukai.io.get_input(args.games_input) as games_file:
         game_records = badukai.bots.zero.load_game_records(open(games_file))
 
+    print('Training on {} game records'.format(len(game_records)))
     bot.train(game_records, num_epochs=args.epochs)
 
     with badukai.io.open_output_filename(args.bot_out) as output_filename:

@@ -217,6 +217,8 @@ class ZeroBot(Bot):
         return new_nodes
 
     def _legal_move_mask(self, state):
+        # WARNING! This breaks the encode_move abstraction!
+        return state.legal_moves_as_array()
         legal_moves = np.zeros(self._encoder.num_moves())
         for move in state.legal_moves():
             if not move.is_resign:
@@ -277,7 +279,7 @@ class ZeroBot(Bot):
         kerasutil.save_model_to_hdf5_group(self._model, model_group)
 
     def search_counts(self):
-        return self.root.visit_counts
+        return [int(x) for x in self.root.visit_counts]
 
     def train(self, game_records, num_epochs=1):
         X = []
@@ -288,7 +290,7 @@ class ZeroBot(Bot):
             winner = game_record.winner
             print('Encoding game %d/%d...' % (gn + 1, len(game_records)))
             gn += 1
-            game = GameState.new_game(self.board_size())
+            game = game_record.initial_state
             for move_record in game_record.move_records:
                 assert move_record.player == game.next_player
                 X.append(self._encoder.encode(game))

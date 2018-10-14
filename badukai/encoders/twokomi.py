@@ -47,13 +47,9 @@ class TwoKomiEncoder(Encoder):
             board_tensor[3] = 1
         elif komi < -4:
             board_tensor[4] = 1
+        board_tensor[2] = game_state.ko_points_as_array()
+
         board = game_state.board
-        for p in self._points:
-            r = p.row - 1
-            c = p.col - 1
-            if board.is_empty(p):
-                if game_state.does_move_violate_ko(Move.play(p)):
-                    board_tensor[2][r][c] = 1
         board_tensor[black_plane] = board.black_stones_as_array()
         board_tensor[white_plane] = board.white_stones_as_array()
 

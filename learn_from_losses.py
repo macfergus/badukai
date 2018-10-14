@@ -1,5 +1,6 @@
 import argparse
 import os
+import random
 import uuid
 from operator import attrgetter
 
@@ -9,9 +10,14 @@ import baduk
 import badukai
 
 
-def complete_game(game, black_bot, white_bot, bump_temp_before):
+def complete_game(game, black_bot, white_bot,
+                  bump_temp_before=0,
+                  min_moves_before_resign=9999,
+                  resign_below=-2.0):
     assert black_bot.board_size() == white_bot.board_size()
     board_size = black_bot.board_size()
+
+    builder = badukai.bots.zero.GameRecordBuilder(game)
 
     max_game_length = max(
         2 * board_size * board_size,
@@ -23,7 +29,6 @@ def complete_game(game, black_bot, white_bot, bump_temp_before):
     }
 
     num_moves = 0
-    builder = badukai.bots.zero.GameRecordBuilder()
     printer = badukai.io.AsciiBoardPrinter()
     while not game.is_over():
         next_bot = players[game.next_player]
@@ -31,6 +36,10 @@ def complete_game(game, black_bot, white_bot, bump_temp_before):
             next_bot.set_temperature(1.0)
         else:
             next_bot.set_temperature(0.0)
+        if num_moves < min_moves_before_resign:
+            next_bot.set_option('resign_below', -2)
+        else:
+            next_bot.set_option('resign_below', resign_below)
         if num_moves >= max_game_length:
             next_move = baduk.Move.pass_turn()
         else:
@@ -74,6 +83,7 @@ def main():
         for k, v in options.items():
             bot.set_option(k, v)
 
+    num_chunks = 0
     game_records = []
     for i in range(args.games):
         print('Game {}/{}...'.format(i + 1, args.games))
@@ -86,19 +96,31 @@ def main():
         print('Next player: {}'.format(
             printer.format_player(game.next_player)))
 
+        # Enable resigning in half of games.
+        resign_thresh = random.choice([-0.98, -2])
         record = complete_game(
             game,
             bot, bot,
-            bump_temp_before=2)
+            bump_temp_before=2,
+            min_moves_before_resign=50,
+            resign_below=-0.98)
         game_records.append(record)
 
         print('Original position was: {} with {} to play'.format(
             worst,
             printer.format_player(game.next_player)
         ))
-    output_file = args.output
-    with badukai.io.open_output(output_file) as outf:
-        badukai.bots.zero.save_game_records(game_records, outf)
+
+        if len(game_records) >= 25:
+            output_file = '{}_{:03d}'.format(args.output, num_chunks)
+            with badukai.io.open_output(output_file) as outf:
+                badukai.bots.zero.save_game_records(game_records, outf)
+            game_records = []
+            num_chunks += 1
+    if game_records:
+        output_file = '{}_{:03d}'.format(args.output, num_chunks)
+        with badukai.io.open_output(output_file) as outf:
+            badukai.bots.zero.save_game_records(game_records, outf)
 
 
 if __name__ == '__main__':

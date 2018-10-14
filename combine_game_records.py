@@ -18,6 +18,7 @@ def main():
         print('Reading {}...'.format(input_file))
         records += badukai.bots.zero.load_game_records(open(input_file))
 
+    print('Loaded {} game records'.format(len(records)))
     with badukai.io.open_output(args.output) as outf:
         badukai.bots.zero.save_game_records(records, outf)
 
