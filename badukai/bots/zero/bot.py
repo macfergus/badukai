@@ -1,6 +1,7 @@
 import math
 import random
 import sys
+import time
 from operator import attrgetter, itemgetter
 
 import numpy as np
@@ -99,6 +100,7 @@ class ZeroBot(Bot):
         self._exploration_factor = 1.25
         self._batch_size = 8
         self._resign_below = -2.0
+        self._debug_log = True
         self.root = None
 
         self._noise_concentration = 0.03
@@ -128,6 +130,7 @@ class ZeroBot(Bot):
         self._temperature = temperature
 
     def select_move(self, game_state):
+        start = time.time()
         self.root = self.create_node(game_state, add_noise=True)
 
         num_rollouts = 0
@@ -157,7 +160,9 @@ class ZeroBot(Bot):
             visit_counts,
             out=np.zeros_like(self.root.total_values),
             where=visit_counts > 0)
-        for move_idx in np.argsort(visit_counts):
+        tiebreak = 0.499 * (expected_values + 1)
+        decide_vals = visit_counts + tiebreak
+        for move_idx in np.argsort(decide_vals):
             visit_count = visit_counts[move_idx]
             if visit_count > 0:
                 sys.stderr.write('{}: {:.3f} {}\n'.format(
@@ -166,17 +171,21 @@ class ZeroBot(Bot):
                     visit_count))
         if self._temperature > 0:
             move_indices, = np.where(visit_counts > 0)
-            raw_counts = visit_counts[move_indices]
+            raw_counts = decide_vals[move_indices]
             p = np.power(raw_counts, 1.0 / self._temperature)
             p /= np.sum(p)
             move_index = np.random.choice(move_indices, p=p)
         else:
-            move_index = np.argmax(visit_counts)
+            move_index = np.argmax(decide_vals)
+
+        self._log_pv(self.root)
 
         chosen_move = self._encoder.decode_move_index(move_index)
         sys.stderr.write('Select {} Q {:.3f}\n'.format(
             format_move(chosen_move),
             expected_values[move_index]))
+        end = time.time()
+        sys.stderr.write('Decided in {:.3f}s\n'.format(end - start))
         sys.stderr.flush()
         if expected_values[move_index] < self._resign_below:
             sys.stderr.write('Resigning because Q {:.3f} < {:.3f}\n'.format(
@@ -259,12 +268,14 @@ class ZeroBot(Bot):
             visits,
             out=np.zeros_like(node.total_values),
             where=visits > 0)
-        
-        total_visits = np.sum(node.visit_counts) + np.sum(node.virtual_losses)
+
+        total_visits = 1 + \
+            np.sum(node.visit_counts) + np.sum(node.virtual_losses)
         uct_scores = node.priors * np.sqrt(total_visits) / (1 + visits)
 
         branch_scores = (
             expected_values + self._exploration_factor * uct_scores)
+
         # Avoid selecting illegal moves.
         branch_scores[node.is_legal == 0] = np.min(branch_scores) - 1
         to_select = np.argmax(branch_scores)
@@ -308,7 +319,7 @@ class ZeroBot(Bot):
             loss=['categorical_crossentropy', 'mse'])
         self._model.fit(
             X, [y_policy, y_value],
-            batch_size=2048,
+            batch_size=512,
             epochs=num_epochs)
 
     def train_from_human(self, human_game_records, batch_size=2048):
@@ -343,6 +354,23 @@ class ZeroBot(Bot):
             X, [y_policy, y_value],
             batch_size=batch_size,
             epochs=1)
+
+    def _get_pv(self, node):
+        best_idx = np.argmax(node.visit_counts)
+        if node.visit_counts[best_idx] < 2:
+            return []
+        return [
+            (
+                self._encoder.decode_move_index(best_idx),
+                node.visit_counts[best_idx]
+            )] + self._get_pv(node.children[best_idx])
+
+    def _log_pv(self, node):
+        if self._debug_log:
+            pv = self._get_pv(node)
+            sys.stderr.write('PV: {}\n'.format(
+                ' / '.join('{} {}'.format(format_move(m), c) for m,c in pv)
+            ))
 
 
 def load_from_hdf5(h5group):
