@@ -53,7 +53,7 @@ def set_tf_options(
     from keras.backend.tensorflow_backend import set_session
     config = tf.ConfigProto()
     if gpu_frac is not None:
-        config.gpu_options.per_process_gpu_memory_fraction = frac
+        config.gpu_options.per_process_gpu_memory_fraction = gpu_frac
     if inter_op_parallelism_threads is not None:
         config.inter_op_parallelism_threads = inter_op_parallelism_threads
     if intra_op_parallelism_threads is not None:

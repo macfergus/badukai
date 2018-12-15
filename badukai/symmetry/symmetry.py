@@ -3,6 +3,7 @@ import baduk
 __all__ = [
     'rotate_point',
     'rotate_board',
+    'rotate_game_record',
 ]
 
 

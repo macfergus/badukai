@@ -9,3 +9,4 @@ from . import ogs
 from . import options
 from . import scoring
 from . import selfplay
+from . import symmetry

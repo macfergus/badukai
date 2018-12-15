@@ -72,7 +72,7 @@ def main():
     args = parser.parse_args()
 
     if args.gpu_frac is not None:
-        badukai.kerasutil.set_gpu_memory_target(args.gpu_frac)
+        badukai.kerasutil.set_tf_options(gpu_frac=args.gpu_frac)
 
     with badukai.io.get_input(args.bot) as bot_file:
         bot = badukai.bots.load_bot(bot_file)
@@ -88,8 +88,9 @@ def main():
     for i in range(args.games):
         print('Game {}/{}...'.format(i + 1, args.games))
         index = badukai.selfplay.load_index(open(args.index))
-        worst = index.sample(0.1)
+        worst = index.sample(0.5)
         game = badukai.selfplay.retrieve_game_state(worst)
+        game = badukai.symmetry.rotate_game_record(game, random.randint(0, 7))
         print(worst)
         printer = badukai.io.AsciiBoardPrinter()
         printer.print_board(game.board)

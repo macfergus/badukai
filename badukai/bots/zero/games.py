@@ -7,6 +7,7 @@ __all__ = [
     'GameRecordBuilder',
     'GameRecord',
     'load_game_records',
+    'generate_game_records',
     'save_game_records',
 ]
 
@@ -145,6 +146,11 @@ class GameRecordDeserializer(object):
             records.append(self.read_game_record())
         return records
 
+    def generate_game_records(self):
+        num_game_records = self.read_int()
+        for _ in range(num_game_records):
+            yield self.read_game_record()
+
     def read_game_record(self):
         initial_state = self.read_game_state()
         num_moves = self.read_int()
@@ -257,3 +263,7 @@ def save_game_records(records, outf):
 def load_game_records(inf):
     deserializer = GameRecordDeserializer(inf)
     return deserializer.read_game_records()
+
+def generate_game_records(inf):
+    deserializer = GameRecordDeserializer(inf)
+    return deserializer.generate_game_records()

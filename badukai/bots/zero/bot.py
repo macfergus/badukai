@@ -264,13 +264,12 @@ class ZeroBot(Bot):
     def select_branch(self, node):
         visits = node.visit_counts + node.virtual_losses
         expected_values = np.divide(
-            node.total_values,
+            node.total_values - node.virtual_losses,
             visits,
             out=np.zeros_like(node.total_values),
             where=visits > 0)
 
-        total_visits = 1 + \
-            np.sum(node.visit_counts) + np.sum(node.virtual_losses)
+        total_visits = 1 + np.sum(visits)
         uct_scores = node.priors * np.sqrt(total_visits) / (1 + visits)
 
         branch_scores = (
@@ -315,12 +314,44 @@ class ZeroBot(Bot):
         print(X.shape, y_policy.shape, y_value.shape)
 
         self._model.compile(
-            SGD(lr=0.01, momentum=0.9),
-            loss=['categorical_crossentropy', 'mse'])
+            SGD(lr=0.002, momentum=0.9),
+            loss=['categorical_crossentropy', 'mse'],
+            loss_weights=[1.0, 0.1])
         self._model.fit(
             X, [y_policy, y_value],
             batch_size=512,
             epochs=num_epochs)
+
+    def train_direct(self, X, y_policy, y_value,
+                     epochs=1,
+                     lr=0.001, momentum=0.9,
+                     batch_size=512):
+        self._model.compile(
+            SGD(lr=lr, momentum=momentum),
+            loss=['categorical_crossentropy', 'mse'],
+            loss_weights=[1.0, 0.1])
+        self._model.fit(
+            X, [y_policy, y_value],
+            batch_size=batch_size,
+            epochs=epochs)
+
+    def encode_game(self, game_record):
+        X = []
+        y_policy = []
+        y_value = []
+        winner = game_record.winner
+        game = game_record.initial_state
+        for move_record in game_record.move_records:
+            assert move_record.player == game.next_player
+            X.append(self._encoder.encode(game))
+            search_counts = np.array(move_record.visit_counts)
+            y_policy.append(search_counts / np.sum(search_counts))
+            y_value.append(1 if game.next_player == winner else -1)
+            game = game.apply_move(move_record.move)
+        X = np.array(X)
+        y_policy = np.array(y_policy)
+        y_value = np.array(y_value)
+        return X, y_policy, y_value
 
     def train_from_human(self, human_game_records, batch_size=2048):
         X = []
@@ -354,6 +385,35 @@ class ZeroBot(Bot):
             X, [y_policy, y_value],
             batch_size=batch_size,
             epochs=1)
+
+    def encode_human(self, human_game_records, discount_rate=0.99):
+        X = []
+        y_policy = []
+        y_value = []
+        gn = 0
+        for game_record in human_game_records:
+            print('Encoding game %d/%d...' % (gn + 1, len(human_game_records)))
+            gn += 1
+            winner = game_record.winner
+            game = game_record.initial_state
+            values = []
+            for move in game_record.moves:
+                X.append(self._encoder.encode(game))
+                search_counts = np.zeros(self._encoder.num_moves())
+                search_counts[self._encoder.encode_move(move)] = 1
+                y_policy.append(search_counts)
+                values.append(1 if game.next_player == winner else -1)
+                game = game.apply_move(move)
+            num_moves = len(values)
+            for i in range(num_moves):
+                distance = num_moves - (i + 1)
+                values[i] *= discount_rate ** distance
+            y_value += values
+        X = np.array(X)
+        y_policy = np.array(y_policy)
+        y_value = np.array(y_value)
+        print(X.shape, y_policy.shape, y_value.shape)
+        return X, y_policy, y_value
 
     def _get_pv(self, node):
         best_idx = np.argmax(node.visit_counts)

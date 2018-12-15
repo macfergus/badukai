@@ -11,10 +11,9 @@ __all__ = [
 
 
 class Position:
-    def __init__(self, source_file, move_num, state, error):
+    def __init__(self, source_file, move_num, error):
         self.source_file = source_file
         self.move_num = move_num
-        self.state = state
         self.error = error
 
     def __str__(self):
@@ -32,7 +31,7 @@ def extract_positions(bot, sgf_file):
             value = bot.evaluate(state)
             error = value - (-1)
             positions.append(Position(
-                sgf_file, i, state, error))
+                sgf_file, i, error))
     return positions
 
 
@@ -72,7 +71,6 @@ def load_index(indexfile):
     positions = [Position(
         pos['source_file'],
         pos['move_num'],
-        None,
         pos['error']
     ) for pos in positions_json]
     return LossIndex(positions)

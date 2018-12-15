@@ -1,6 +1,8 @@
 import json
 from io import StringIO
 
+import parsimonious
+
 from .archive import SGFLocator, find_sgfs, tarball_iterator
 from ..io import read_game_from_sgf
 
@@ -39,10 +41,12 @@ class Corpus:
     def start(self):
         return Pointer(0, 0)
 
-    def next(self, pointer):
+    def next(self, pointer, wrap=True):
         epoch = pointer.epoch
         next_idx = pointer.idx + 1
         if next_idx >= len(self.boundaries):
+            if not wrap:
+                return None
             next_idx = 0
             epoch += 1
         return Pointer(epoch, next_idx)
@@ -79,6 +83,8 @@ class Corpus:
                     except ValueError as e:
                         print('Error on {}: {}'.format(sgf, e))
                         pass
+                    except parsimonious.exceptions.ParseError as e:
+                        print('Error on {}: {}'.format(sgf, e))
             idx += 1
         return game_records
 
