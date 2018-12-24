@@ -136,7 +136,14 @@ class ZeroBot(Bot):
         num_rollouts = 0
         while num_rollouts < self._num_rollouts:
             to_expand = set()
-            while len(to_expand) < self._batch_size:
+            batch_count = 0
+            # Sometimes, even with a virtual loss, we may explore the
+            # same branch multiple times. In that case we can keep
+            # looking for new branches until we fill the whole batch.
+            # However -- in late game situations it's possible there are
+            # less than batch_size legal moves. So to avoid an infinite
+            # loop we cap the number of rounds of this loop.
+            while len(to_expand) < self._batch_size and batch_count < 2 * self._batch_size:
                 # Find a leaf.
                 node = self.root
                 move = self.select_branch(node)
@@ -145,6 +152,7 @@ class ZeroBot(Bot):
                     node = node.get_child(move)
                     move = self.select_branch(node)
                 node.add_virtual_loss(move)
+                batch_count += 1
                 to_expand.add((node, move))
 
             new_children = self.create_children(to_expand)
@@ -329,7 +337,7 @@ class ZeroBot(Bot):
         self._model.compile(
             SGD(lr=lr, momentum=momentum),
             loss=['categorical_crossentropy', 'mse'],
-            loss_weights=[1.0, 0.1])
+            loss_weights=[1.0, 0.3])
         self._model.fit(
             X, [y_policy, y_value],
             batch_size=batch_size,

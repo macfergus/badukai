@@ -88,7 +88,7 @@ def main():
     for i in range(args.games):
         print('Game {}/{}...'.format(i + 1, args.games))
         index = badukai.selfplay.load_index(open(args.index))
-        worst = index.sample(0.5)
+        worst = index.sample(0.15)
         game = badukai.selfplay.retrieve_game_state(worst)
         game = badukai.symmetry.rotate_game_record(game, random.randint(0, 7))
         print(worst)
@@ -102,9 +102,9 @@ def main():
         record = complete_game(
             game,
             bot, bot,
-            bump_temp_before=2,
+            bump_temp_before=4,
             min_moves_before_resign=50,
-            resign_below=-0.98)
+            resign_below=resign_thresh)
         game_records.append(record)
 
         print('Original position was: {} with {} to play'.format(
