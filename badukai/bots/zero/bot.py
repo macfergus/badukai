@@ -220,7 +220,7 @@ class ZeroBot(Bot):
             return Move.resign()
 
         if self._gracious_winner is not None:
-            if game_state.last_move == Move.pass_turn():
+            if game_state.last_move is not None and game_state.last_move == Move.pass_turn():
                 pass_idx = self._encode.encode_move(Move.pass_turn())
                 if visit_counts[pass_idx] >= 2 and \
                         expected_values[pass_idx] > self._gracious_winner:
