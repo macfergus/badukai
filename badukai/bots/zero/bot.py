@@ -221,7 +221,7 @@ class ZeroBot(Bot):
 
         if self._gracious_winner is not None:
             if game_state.last_move is not None and game_state.last_move == Move.pass_turn():
-                pass_idx = self._encode.encode_move(Move.pass_turn())
+                pass_idx = self._encoder.encode_move(Move.pass_turn())
                 if visit_counts[pass_idx] >= 2 and \
                         expected_values[pass_idx] > self._gracious_winner:
                     sys.stderr.write('Pass has Q {:.3f}\n'.format(expected_values[pass_idx]))
