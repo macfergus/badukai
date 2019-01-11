@@ -123,6 +123,8 @@ class ZeroBot(Bot):
         self._noise_concentration = 0.03
         self._noise_weight = 0.25
 
+        self._gracious_winner = None
+
     def name(self):
         return 'ZeroBot'
 
@@ -142,6 +144,8 @@ class ZeroBot(Bot):
             self._resign_below = float(value)
         elif name == 'noise_weight':
             self._noise_weight = float(value)
+        elif name == 'gracious_winner':
+            self._gracious_winner = float(value)
         else:
             raise KeyError(name)
 
@@ -214,6 +218,14 @@ class ZeroBot(Bot):
                 expected_values[move_index],
                 self._resign_below))
             return Move.resign()
+
+        if self._gracious_winner is not None:
+            if game_state.last_move == Move.pass_turn():
+                pass_idx = self._encode.encode_move(Move.pass_turn())
+                if visit_counts[pass_idx] >= 2 and \
+                        expected_values[pass_idx] > self._gracious_winner:
+                    sys.stderr.write('Pass has Q {:.3f}\n'.format(expected_values[pass_idx]))
+                    return Move.pass_turn()
         return chosen_move
 
     def evaluate(self, game_state):
