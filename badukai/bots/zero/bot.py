@@ -19,6 +19,7 @@ __all__ = [
 
 
 NOISE = 1e-4
+VIRTUAL_LOSS_FRAC = 0.8
 
 
 COLS = 'ABCDEFGHJKLMNOPQRST'
@@ -30,14 +31,30 @@ def format_move(move):
     return COLS[move.point.col - 1] + str(move.point.row)
 
 
-def print_tree(node, indent=''):
-    for child_move, child_node in node._children.items():
-        print("%s%s p %.6f vc %d q %.6f" % (
-            indent, format_move(child_move),
-            node._branches[child_move].prior,
-            node._branches[child_move].visit_count,
-            node._branches[child_move].total_value / node._branches[child_move].visit_count))
-        print_tree(child_node, indent + '  ')
+def print_tree(node, encoder, indent=''):
+    expected_values = np.divide(
+        node.total_values,
+        node.visit_counts,
+        out=-1 * np.ones_like(node.total_values),
+        where=node.visit_counts > 0)
+    v_visits = node.visit_counts + node.virtual_losses
+    v_expected_values = np.divide(
+        node.total_values + node.value * node.virtual_losses,
+        v_visits,
+        out=-1 * np.ones_like(node.total_values),
+        where=v_visits > 0)
+    for child_move_idx, child_node in enumerate(node.children):
+        if v_visits[child_move_idx] == 0:
+            continue
+        print("%s%s p %.6f vc %d vl %.3f q %.6f vq %.6f" % (
+            indent, format_move(encoder.decode_move_index(child_move_idx)),
+            node.priors[child_move_idx],
+            node.visit_counts[child_move_idx],
+            node.virtual_losses[child_move_idx],
+            expected_values[child_move_idx],
+            v_expected_values[child_move_idx]))
+        if child_node is not None:
+            print_tree(child_node, encoder, indent + '  ')
 
 
 class Node(object):
@@ -123,6 +140,8 @@ class ZeroBot(Bot):
             self._temperature = float(value)
         elif name == 'resign_below':
             self._resign_below = float(value)
+        elif name == 'noise_weight':
+            self._noise_weight = float(value)
         else:
             raise KeyError(name)
 
@@ -137,13 +156,7 @@ class ZeroBot(Bot):
         while num_rollouts < self._num_rollouts:
             to_expand = set()
             batch_count = 0
-            # Sometimes, even with a virtual loss, we may explore the
-            # same branch multiple times. In that case we can keep
-            # looking for new branches until we fill the whole batch.
-            # However -- in late game situations it's possible there are
-            # less than batch_size legal moves. So to avoid an infinite
-            # loop we cap the number of rounds of this loop.
-            while len(to_expand) < self._batch_size and batch_count < 2 * self._batch_size:
+            while batch_count < self._batch_size:
                 # Find a leaf.
                 node = self.root
                 move = self.select_branch(node)
@@ -155,18 +168,19 @@ class ZeroBot(Bot):
                 batch_count += 1
                 to_expand.add((node, move))
 
+            batch_num_visits = len(to_expand)
             new_children = self.create_children(to_expand)
             for new_child in new_children:
                 new_child.parent.record_visit(
                     new_child.move, new_child.value)
-            num_rollouts += self._batch_size
+            num_rollouts += batch_num_visits
 
         # Now select a move in proportion to how often we visited it.
         visit_counts = self.root.visit_counts
         expected_values = np.divide(
             self.root.total_values,
             visit_counts,
-            out=np.zeros_like(self.root.total_values),
+            out=-1 * np.ones_like(self.root.total_values),
             where=visit_counts > 0)
         tiebreak = 0.499 * (expected_values + 1)
         decide_vals = visit_counts + tiebreak
@@ -271,10 +285,11 @@ class ZeroBot(Bot):
 
     def select_branch(self, node):
         visits = node.visit_counts + node.virtual_losses
+        vl_value = VIRTUAL_LOSS_FRAC * (node.value - -1) + (-1)
         expected_values = np.divide(
-            node.total_values - node.virtual_losses,
+            node.total_values + vl_value * node.virtual_losses,
             visits,
-            out=np.zeros_like(node.total_values),
+            out=-1 * np.ones_like(node.total_values),
             where=visits > 0)
 
         total_visits = 1 + np.sum(visits)
@@ -332,12 +347,12 @@ class ZeroBot(Bot):
 
     def train_direct(self, X, y_policy, y_value,
                      epochs=1,
-                     lr=0.001, momentum=0.9,
+                     lr=0.01, momentum=0.9,
                      batch_size=512):
         self._model.compile(
             SGD(lr=lr, momentum=momentum),
             loss=['categorical_crossentropy', 'mse'],
-            loss_weights=[1.0, 0.3])
+            loss_weights=[1.0, 0.2])
         self._model.fit(
             X, [y_policy, y_value],
             batch_size=batch_size,

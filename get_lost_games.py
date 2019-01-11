@@ -24,6 +24,7 @@ def main():
     parser.add_argument('--auth', type=str, required=True)
     parser.add_argument('--secret', type=str, required=True)
     parser.add_argument('--num-games', '-n', type=int, default=100)
+    parser.add_argument('--start-page', type=int)
     parser.add_argument('--output', '-o', required=True)
     args = parser.parse_args()
 
@@ -41,10 +42,16 @@ def main():
 
     opponents = collections.Counter()
     total = 0
-    for game in badukai.ogs.get_game_records(client):
+    for game in badukai.ogs.get_game_records(client, start_page=args.start_page):
+        game_id = game['id']
         i_was_black = game['players']['black']['id'] == user_id
         i_was_white = game['players']['white']['id'] == user_id
         detail_path = game['related']['detail']
+        fname = '{}.sgf'.format(game['id'])
+        output_fname = os.path.join(args.output, fname)
+        if os.path.exists(output_fname):
+            print('Already downloaded {}'.format(fname))
+            continue
         loss = False
         opponent = None
         if not game.get('outcome'):
@@ -58,13 +65,15 @@ def main():
             loss = True
         if loss:
             details = client.make_request(detail_path)
-            komi = details['gamedata']['komi']
             if 'gamedata' not in details:
                 print('What up with these details?')
                 print(details)
-            elif len(details['gamedata']['moves']) < 30:
+                continue
+            komi = details['gamedata']['komi']
+            if len(details['gamedata']['moves']) < 30:
                 print('Too short.')
-            elif details['gamedata']['start_time'] < 1527577200:
+            elif details['gamedata']['start_time'] < 1540364400:
+                # was 1527577200
                 print('Too old.')
             elif komi < -9 or komi > 9:
                 print('Too much komi.')
@@ -90,8 +99,6 @@ def main():
                 for m in game_moves:
                     move = decode_ogs_move(m)
                     g = g.apply_move(move)
-                fname = '{}.sgf'.format(game['id'])
-                output_fname = os.path.join(args.output, fname)
                 print('Saving {}'.format(fname))
                 with open(output_fname, 'w') as outf:
                     badukai.io.save_game_as_sgf(

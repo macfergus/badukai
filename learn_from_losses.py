@@ -1,7 +1,10 @@
 import argparse
+import datetime
+import enum
 import os
 import random
 import uuid
+from collections import namedtuple
 from operator import attrgetter
 
 import requests
@@ -10,10 +13,47 @@ import baduk
 import badukai
 
 
+class ResignLevel(enum.Enum):
+    paranoid = 0
+    conservative = 1
+    aggressive = 2
+
+
+def choose_resign_level():
+    x = random.random()
+    if x < 0.15:
+        return ResignLevel.paranoid
+    if x < 0.25:
+        return ResignLevel.aggressive
+    return ResignLevel.conservative
+
+
+class GameInfo(namedtuple('GameInfo', 'orig_pos orig_player resign_level eta_msg')):
+    pass
+
+
+def print_game_info(game_info):
+    print('Original game: {}, {} to play'.format(game_info.orig_pos, game_info.orig_player))
+    print('Resign level: {}'.format(game_info.resign_level))
+    print(game_info.eta_msg)
+
+
+def get_resign_thresh(resign_level):
+    if resign_level == ResignLevel.paranoid:
+        # Don't resign, always complete the game
+        return -2
+    if resign_level == ResignLevel.conservative:
+        return -0.97
+    if resign_level == ResignLevel.aggressive:
+        return -0.8
+    raise ValueError(resign_level)
+
+
 def complete_game(game, black_bot, white_bot,
                   bump_temp_before=0,
                   min_moves_before_resign=9999,
-                  resign_below=-2.0):
+                  resign_below=-2.0,
+                  game_info=None):
     assert black_bot.board_size() == white_bot.board_size()
     board_size = black_bot.board_size()
 
@@ -51,6 +91,8 @@ def complete_game(game, black_bot, white_bot,
         num_moves += 1
         game = game.apply_move(next_move)
         printer.print_board(game.board)
+        if game_info:
+            print_game_info(game_info)
         print('')
 
     game_result = badukai.scoring.remove_dead_stones_and_score(game)
@@ -85,10 +127,12 @@ def main():
 
     num_chunks = 0
     game_records = []
+    eta_msg = 'No ETA yet'
+    start = datetime.datetime.now()
     for i in range(args.games):
         print('Game {}/{}...'.format(i + 1, args.games))
         index = badukai.selfplay.load_index(open(args.index))
-        worst = index.sample(0.15)
+        worst = index.sample(0.25)
         game = badukai.selfplay.retrieve_game_state(worst)
         game = badukai.symmetry.rotate_game_record(game, random.randint(0, 7))
         print(worst)
@@ -97,14 +141,22 @@ def main():
         print('Next player: {}'.format(
             printer.format_player(game.next_player)))
 
-        # Enable resigning in half of games.
-        resign_thresh = random.choice([-0.98, -2])
+        # Vary resignation settings.
+        resign_level = choose_resign_level()
+        resign_thresh = get_resign_thresh(resign_level)
+        print('Resign settings: {} ({:.3f})'.format(resign_level, resign_thresh))
+        game_info = GameInfo(
+            orig_pos=worst,
+            orig_player=game.next_player,
+            resign_level=resign_level,
+            eta_msg=eta_msg)
         record = complete_game(
             game,
             bot, bot,
             bump_temp_before=4,
-            min_moves_before_resign=50,
-            resign_below=resign_thresh)
+            min_moves_before_resign=30,
+            resign_below=resign_thresh,
+            game_info=game_info)
         game_records.append(record)
 
         print('Original position was: {} with {} to play'.format(
@@ -118,6 +170,21 @@ def main():
                 badukai.bots.zero.save_game_records(game_records, outf)
             game_records = []
             num_chunks += 1
+            # Refresh the index every time we flush.
+            index = badukai.selfplay.load_index(open(args.index))
+
+        end = datetime.datetime.now()
+        elapsed_s = (end - start).total_seconds()
+        games_per_s = float(i + 1) / elapsed_s
+        games_per_hour = 3600.0 * games_per_s
+        games_remaining = args.games - i - 1
+        if games_remaining > 0:
+            eta_s = games_remaining / games_per_s
+            eta_dt = end + datetime.timedelta(seconds=eta_s)
+            eta_msg = 'Completing {:.1f} games per hour; ETA {}'.format(
+                games_per_hour,
+                eta_dt.strftime('%Y-%m-%d %H:%M'))
+
     if game_records:
         output_file = '{}_{:03d}'.format(args.output, num_chunks)
         with badukai.io.open_output(output_file) as outf:

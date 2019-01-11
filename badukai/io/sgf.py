@@ -164,7 +164,12 @@ def read_game_from_sgf(sgffile):
     sequence = visitor.visit(tree)
     root, moves = sequence[0], sequence[1:]
     board_size = int(get_prop(root, 'SZ'))
-    komi = float(get_prop(root, 'KM'))
+    try:
+        komi = float(get_prop(root, 'KM'))
+    except KeyError:
+        # We don't truly support zero komi, pretend it's half point
+        # komi.
+        komi = 0.5
     result = get_prop(root, 'RE')
     if result.startswith('B+'):
         winner = Player.black

@@ -18,8 +18,12 @@ class AuthorizationError(Exception):
     pass
 
 
+class ServerError(Exception):
+    pass
+
+
 class OGSClient:
-    def __init__(self, base_url, token, rate_limit=3.0):
+    def __init__(self, base_url, token, rate_limit=2.5):
         self.base_url = urlparse(base_url)
         self.token = token
         self.last_request = 0.0
@@ -45,11 +49,16 @@ class OGSClient:
         self.last_request = time.time()
         if response.status_code == 401:
             raise AuthorizationError(response.status_code)
+        if response.status_code >= 500:
+            raise ServerError(response.status_code)
         return response.json()
 
 
-def get_game_records(client):
-    game_list = client.make_request('/api/v1/megames')
+def get_game_records(client, start_page=None):
+    path = '/api/v1/megames/?page_size=100'
+    if start_page is not None:
+        path += '&page={}'.format(start_page)
+    game_list = client.make_request(path)
     while True:
         for g in game_list['results']:
             yield g
