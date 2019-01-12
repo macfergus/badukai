@@ -22,6 +22,17 @@ NOISE = 1e-4
 VIRTUAL_LOSS_FRAC = 0.8
 
 
+def calc_expected_values(total_values, visit_counts, virtual_losses=None, vl_value=0.0):
+    if virtual_losses is None:
+        virtual_losses = np.zeros_like(total_values)
+    virtual_visit_counts = visit_counts + virtual_losses
+    return np.divide(
+        total_values + vl_value * virtual_losses,
+        virtual_visit_counts,
+        out=-1 * np.ones_like(total_values),
+        where=virtual_visit_counts > 0)
+
+
 COLS = 'ABCDEFGHJKLMNOPQRST'
 def format_move(move):
     if move.is_pass:
@@ -181,11 +192,7 @@ class ZeroBot(Bot):
 
         # Now select a move in proportion to how often we visited it.
         visit_counts = self.root.visit_counts
-        expected_values = np.divide(
-            self.root.total_values,
-            visit_counts,
-            out=-1 * np.ones_like(self.root.total_values),
-            where=visit_counts > 0)
+        expected_values = calc_expected_values(self.root.total_values, visit_counts)
         tiebreak = 0.499 * (expected_values + 1)
         decide_vals = visit_counts + tiebreak
         for move_idx in np.argsort(decide_vals):
@@ -298,11 +305,11 @@ class ZeroBot(Bot):
     def select_branch(self, node):
         visits = node.visit_counts + node.virtual_losses
         vl_value = VIRTUAL_LOSS_FRAC * (node.value - -1) + (-1)
-        expected_values = np.divide(
-            node.total_values + vl_value * node.virtual_losses,
-            visits,
-            out=-1 * np.ones_like(node.total_values),
-            where=visits > 0)
+        expected_values = calc_expected_values(
+            node.total_values,
+            node.visit_counts,
+            virtual_losses=node.virtual_losses,
+            vl_value=vl_value)
 
         total_visits = 1 + np.sum(visits)
         uct_scores = node.priors * np.sqrt(total_visits) / (1 + visits)
