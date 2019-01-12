@@ -41,7 +41,7 @@ def save_game_as_sgf(outf, game, game_result,
     if black_name:
         outf.write('PB[{}]'.format(black_name))
     if white_name:
-        outf.write('PW[{}]'.format(black_name))
+        outf.write('PW[{}]'.format(white_name))
     if date:
         outf.write('DT[{}]'.format(date.strftime('%Y-%m-%d')))
     if komi:

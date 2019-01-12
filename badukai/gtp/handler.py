@@ -43,6 +43,14 @@ def parse_gtp_color(color):
     raise ValueError(color)
 
 
+def encode_gtp_color(color):
+    if color == baduk.Player.black:
+        return 'b'
+    if color == baduk.Player.white:
+        return 'w'
+    raise ValueError(color)
+
+
 def encode_gtp_move(move):
     if move.is_resign:
         return 'resign'
