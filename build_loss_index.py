@@ -16,10 +16,11 @@ def main():
     bot = badukai.bots.load_bot(args.bot)
 
     sgf_files = []
-    for fname in os.listdir(args.game_records):
-        full_path = os.path.join(args.game_records, fname)
-        if full_path.endswith('.sgf'):
-            sgf_files.append(full_path)
+    for dirpath, dirnames, names in os.walk(args.game_records):
+        for fname in names:
+            full_path = os.path.join(dirpath, fname)
+            if full_path.endswith('.sgf'):
+                sgf_files.append(full_path)
 
     index = badukai.selfplay.build_index(bot, sgf_files)
     with open(args.index_file, 'w') as outf:

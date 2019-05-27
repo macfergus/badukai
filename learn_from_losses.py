@@ -132,7 +132,7 @@ def main():
     for i in range(args.games):
         print('Game {}/{}...'.format(i + 1, args.games))
         index = badukai.selfplay.load_index(open(args.index))
-        worst = index.sample(0.25)
+        worst = index.sample(1.0 / 10.0, decay_per_day=0.02)
         game = badukai.selfplay.retrieve_game_state(worst)
         game = badukai.symmetry.rotate_game_record(game, random.randint(0, 7))
         print(worst)

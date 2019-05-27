@@ -10,6 +10,7 @@ from baduk import GameState, Move
 
 from ... import encoders
 from ... import kerasutil
+from ... import schedules
 from ..base import Bot
 
 __all__ = [
@@ -124,10 +125,10 @@ class ZeroBot(Bot):
         self._model = model
         self._board_size = encoder.board_size()
         self._num_rollouts = 900
-        self._temperature = 0.0
         self._exploration_factor = 1.25
         self._batch_size = 8
         self._resign_below = -2.0
+        self._temp_schedule = schedules.ConstantSchedule(0.0)
         self._debug_log = True
         self.root = None
 
@@ -150,7 +151,7 @@ class ZeroBot(Bot):
         elif name == 'batch_size':
             self._batch_size = int(value)
         elif name == 'temperature':
-            self._temperature = float(value)
+            self._temp_schedule = schedules.parse_schedule(value)
         elif name == 'resign_below':
             self._resign_below = float(value)
         elif name == 'noise_weight':
@@ -202,10 +203,11 @@ class ZeroBot(Bot):
                     format_move(self._encoder.decode_move_index(move_idx)),
                     expected_values[move_idx],
                     visit_count))
-        if self._temperature > 0:
+        temperature = self._temp_schedule.get(game_state.num_moves)
+        if temperature > 0:
             move_indices, = np.where(visit_counts > 0)
             raw_counts = decide_vals[move_indices]
-            p = np.power(raw_counts, 1.0 / self._temperature)
+            p = np.power(raw_counts, 1.0 / temperature)
             p /= np.sum(p)
             move_index = np.random.choice(move_indices, p=p)
         else:
@@ -366,16 +368,24 @@ class ZeroBot(Bot):
 
     def train_direct(self, X, y_policy, y_value,
                      epochs=1,
-                     lr=0.01, momentum=0.9,
-                     batch_size=512):
+                     optimizer='sgd',
+                     lr=0.05, momentum=0.9,
+                     batch_size=512,
+                     value_weight=0.1,
+                     validation_frac=0.0):
+        if optimizer == 'sgd':
+            opt = SGD(lr=lr, momentum=momentum)
+        elif optimizer == 'adadelta':
+            opt = Adadelta()
         self._model.compile(
-            SGD(lr=lr, momentum=momentum),
+            opt,
             loss=['categorical_crossentropy', 'mse'],
-            loss_weights=[1.0, 0.2])
+            loss_weights=[1.0, value_weight])
         self._model.fit(
             X, [y_policy, y_value],
             batch_size=batch_size,
-            epochs=epochs)
+            epochs=epochs,
+            validation_split=validation_frac)
 
     def encode_game(self, game_record):
         X = []
@@ -428,13 +438,12 @@ class ZeroBot(Bot):
             batch_size=batch_size,
             epochs=1)
 
-    def encode_human(self, human_game_records, discount_rate=0.99):
+    def encode_human(self, human_game_records, discount_rate=0.995):
         X = []
         y_policy = []
         y_value = []
         gn = 0
         for game_record in human_game_records:
-            print('Encoding game %d/%d...' % (gn + 1, len(human_game_records)))
             gn += 1
             winner = game_record.winner
             game = game_record.initial_state

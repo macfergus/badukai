@@ -1,5 +1,7 @@
 import json
 import numpy as np
+import os
+import time
 
 from ..io import read_game_from_sgf
 
@@ -10,17 +12,23 @@ __all__ = [
 ]
 
 
+def get_create_ts(filename):
+    return os.stat(filename).st_ctime
+
+
 class Position:
-    def __init__(self, source_file, move_num, error):
+    def __init__(self, source_file, move_num, error, create_ts):
         self.source_file = source_file
         self.move_num = move_num
         self.error = error
+        self.create_ts = create_ts
 
     def __str__(self):
         return '{}:{} ({})'.format(self.source_file, self.move_num, self.error)
 
 
 def extract_positions(bot, sgf_file):
+    create_ts = get_create_ts(sgf_file)
     game_record = read_game_from_sgf(open(sgf_file))
     state = game_record.initial_state
     winner = game_record.winner
@@ -31,7 +39,7 @@ def extract_positions(bot, sgf_file):
             value = bot.evaluate(state)
             error = value - (-1)
             positions.append(Position(
-                sgf_file, i, error))
+                sgf_file, i, error, create_ts))
     return positions
 
 
@@ -45,11 +53,17 @@ class LossIndex:
             'source_file': pos.source_file,
             'move_num': pos.move_num,
             'error': pos.error,
+            'create_ts': pos.create_ts,
         } for pos in self.positions]
         json.dump(positions_json, outf)
 
-    def sample(self, temperature=1.0):
-        p = np.array([pos.error for pos in self.positions]) + 1e-4
+    def sample(self, temperature=1.0, decay_per_day=0.0):
+        now = time.time()
+        creates = np.array([pos.create_ts for pos in self.positions])
+        ages_s = now - creates
+        ages_days = ages_s / (24 * 3600.0)
+        age_decays = np.power((1 - decay_per_day), ages_days)
+        p = np.array([pos.error for pos in self.positions]) * age_decays + 1e-4
         p /= np.sum(p)
         p = np.power(p, 1.0 / temperature)
         p /= np.sum(p)
@@ -86,7 +100,8 @@ def load_index(indexfile):
     positions = [Position(
         pos['source_file'],
         pos['move_num'],
-        pos['error']
+        pos['error'],
+        pos['create_ts'],
     ) for pos in positions_json]
     return LossIndex(positions)
 

@@ -1,9 +1,22 @@
 import argparse
 import random
 import time
+from collections import namedtuple
 
 import h5py
 import numpy as np
+
+
+Datasource = namedtuple('Datasource', 'X action value n')
+
+def open_dataset(fname):
+    h5file = h5py.File(fname, 'r')
+    n = h5file['X'].len()
+    return Datasource(
+        X=h5file['X'],
+        action=h5file['y_action'],
+        value=h5file['y_value'],
+        n=n)
 
 
 def h5_append(dataset, array):
@@ -16,34 +29,33 @@ def h5_append(dataset, array):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--primary', '-p', required=True)
+    parser.add_argument('--input', '-i', action='append')
+    parser.add_argument('--ratio', '-r', type=float, action='append')
     parser.add_argument('--output', '-o', required=True)
-    parser.add_argument('--ratio', '-r', type=float)
-    parser.add_argument('self_play_file')
-    parser.add_argument('human_file')
     args = parser.parse_args()
 
-    self_play_in = h5py.File(args.self_play_file, 'r')
-    human_in = h5py.File(args.human_file, 'r')
-    n_self_play = self_play_in['X'].len()
-    n_human = human_in['X'].len()
-    target_n_human = int(n_self_play / args.ratio)
+    assert len(args.input) == len(args.ratio)
+    print(args.input)
+    print(args.ratio)
 
-    self_idx = np.arange(n_self_play)
-    human_idx = np.random.choice(n_human, size=target_n_human, replace=False)
-    indices = [('self', i) for i in self_idx]
-    indices += [('human', i) for i in human_idx]
+    datasets = {}
+    primary = open_dataset(args.primary)
+    datasets['primary'] = primary
+    indices = [('primary', i) for i in range(primary.n)]
+
+    for fname, ratio in zip(args.input, args.ratio):
+        print('open {}'.format(fname))
+        datasets[fname] = open_dataset(fname)
+        target_size = int(primary.n / ratio)
+        print('Take {} records from {}'.format(target_size, fname))
+        idx = np.random.choice(datasets[fname].n, size=target_size, replace=False)
+        indices += [(fname, i) for i in idx]
     random.shuffle(indices)
 
-    self_X = self_play_in['X']
-    self_action = self_play_in['y_action']
-    self_value = self_play_in['y_value']
-    human_X = human_in['X']
-    human_action = human_in['y_action']
-    human_value = human_in['y_value']
-
-    output_shape = (len(indices),) + self_X.shape[1:]
-    action_shape = (len(indices),) + self_action.shape[1:]
-    value_shape = (len(indices),) + self_value.shape[1:]
+    output_shape = (len(indices),) + primary.X.shape[1:]
+    action_shape = (len(indices),) + primary.action.shape[1:]
+    value_shape = (len(indices),) + primary.value.shape[1:]
 
     print(output_shape, action_shape, value_shape)
 
@@ -55,15 +67,11 @@ def main():
         start = time.time()
         n = len(indices)
         for j, pair in enumerate(indices):
-            src, i = pair
-            if src == 'self':
-                X_out[j] = self_X[i]
-                action_out[j] = self_action[i]
-                value_out[j] = self_value[i]
-            else:
-                X_out[j] = human_X[i]
-                action_out[j] = human_action[i]
-                value_out[j] = human_value[i]
+            key, i = pair
+            src = datasets[key]
+            X_out[j] = src.X[i]
+            action_out[j] = src.action[i]
+            value_out[j] = src.value[i]
             if j > 1 and j % 1000 == 0:
                 elapsed = time.time() - start
                 remaining = n - j
