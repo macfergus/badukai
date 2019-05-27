@@ -26,7 +26,10 @@ def main():
         game_records = corpus.get_game_records(chunk)
         print('Chunk {} has {} usable game records'.format(
             chunk, len(game_records)))
-        bot.train_from_human(game_records, batch_size=512)
+        X, y_action, y_value = bot.encode_human(game_records)
+        bot.train_direct(
+            X, y_action, y_value,
+            optimizer='adadelta', batch_size=256)
 
         with badukai.io.open_output_filename(args.bot_out) as output_filename:
             badukai.bots.save_bot(bot, output_filename)

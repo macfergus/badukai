@@ -12,6 +12,8 @@ def main():
     parser.add_argument('--chunk-size', '-c', type=int)
     parser.add_argument('--bot', required=True)
     parser.add_argument('--bot-out', required=True)
+    parser.add_argument('--skip', type=int, default=0)
+    parser.add_argument('--batch-size', type=int, default=512)
     args = parser.parse_args()
 
     with badukai.io.get_input(args.bot) as bot_file:
@@ -28,17 +30,20 @@ def main():
         n_chunk = n // args.chunk_size
         if n_chunk * args.chunk_size < n:
             n_chunk += 1
-        for i in range(n_chunk):
+        for i in range(args.skip, n_chunk):
             print('{} / {}...'.format(i + 1, n_chunk))
             chunk_start = i * args.chunk_size
             chunk_end = chunk_start + args.chunk_size
             batch_X = np.array(X[chunk_start:chunk_end])
             batch_action = np.array(y_action[chunk_start:chunk_end])
             batch_value = np.array(y_value[chunk_start:chunk_end])
-            bot.train_direct(batch_X, batch_action, batch_value)
+            bot.train_direct(
+                batch_X, batch_action, batch_value,
+                batch_size=args.batch_size,
+                validation_frac=0.00)
 
-    with badukai.io.open_output_filename(args.bot_out) as output_filename:
-        badukai.bots.save_bot(bot, output_filename)
+            with badukai.io.open_output_filename(args.bot_out) as output_filename:
+                badukai.bots.save_bot(bot, output_filename)
 
 
 if __name__ == '__main__':
