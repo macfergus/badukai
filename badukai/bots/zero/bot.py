@@ -23,6 +23,31 @@ NOISE = 1e-4
 VIRTUAL_LOSS_FRAC = 0.8
 
 
+def get_ladder_points(state):
+    legal_moves = state.legal_moves_as_array()
+    capture_points = state.board.liberties_as_array(
+        state.next_player.other, 1
+    ).flatten()
+    capture_points.resize(legal_moves.shape)
+    capture_points *= legal_moves
+    if np.sum(capture_points) > 0:
+        return capture_points
+    escape_points = state.board.liberties_as_array(
+        state.next_player, 1
+    ).flatten()
+    escape_points.resize(legal_moves.shape)
+    escape_points *= legal_moves
+    if np.sum(escape_points) > 0:
+        return escape_points
+    ladder_points = state.board.liberties_as_array(
+        state.next_player.other, 2
+    ).flatten()
+    ladder_points = ladder_points.flatten()
+    ladder_points.resize(legal_moves.shape)
+    ladder_points *= legal_moves
+    return ladder_points
+
+
 def calc_expected_values(total_values, visit_counts, virtual_losses=None, vl_value=0.0):
     if virtual_losses is None:
         virtual_losses = np.zeros_like(total_values)
@@ -119,12 +144,71 @@ class Node(object):
         self.virtual_losses[:] = 0
 
 
+class TacNode:
+    """Tree node for tactical reading.
+
+    This just reads out atari-extend sequences in a minimax fashion.
+    """
+    def __init__(self, state, value, ladder_points, priors, legal_moves):
+        self.state = state
+        self.value = value
+        self.ladder_points = ladder_points
+        self.priors = priors
+        self.legal_moves = legal_moves
+        self.children = {}
+
+    @property
+    def n_children(self):
+        return np.sum(self.ladder_points)
+
+
+def get_minimax_value(tac_node):
+    if not tac_node.children:
+        return tac_node.value
+    best_value = -2
+    for _, child in tac_node.children.items():
+        child_value = -1 * get_minimax_value(child)
+        if child_value > best_value:
+            best_value = child_value
+    return best_value
+
+
+def convert_tree(tac_node, last_move=None, parent=None):
+    value = get_minimax_value(tac_node)
+    node = Node(
+        tac_node.state,
+        tac_node.value,
+        tac_node.priors,
+        tac_node.legal_moves,
+        last_move,
+        parent
+    )
+    if not tac_node.children:
+        return
+    best_value = -2
+    best_move = -1
+    for move_idx, child in tac_node.children.items():
+        child_value = -1 * get_minimax_value(child)
+        if child_value > best_value:
+            best_value = child_value
+            best_move = move_idx
+    child = tac_node.children[best_move]
+    child_node = convert_tree(
+        child,
+        best_move,
+        node
+    )
+    node.record_visit(best_move, -1 * best_value)
+    return node
+
+
 class ZeroBot(Bot):
     def __init__(self, encoder, model):
         self._encoder = encoder
         self._model = model
         self._board_size = encoder.board_size()
         self._num_rollouts = 900
+        self._ladder_rollouts = 0
         self._exploration_factor = 1.25
         self._batch_size = 8
         self._resign_below = -2.0
@@ -146,6 +230,8 @@ class ZeroBot(Bot):
     def set_option(self, name, value):
         if name == 'num_rollouts':
             self._num_rollouts = int(value)
+        elif name == 'ladder_rollouts':
+            self._ladder_rollouts = int(value)
         elif name == 'exploration':
             self._exploration_factor = float(value)
         elif name == 'batch_size':
@@ -164,9 +250,128 @@ class ZeroBot(Bot):
     def set_temperature(self, temperature):
         self._temperature = temperature
 
+    def read_ladders(self, game_state, max_rollouts):
+        start = time.time()
+        from ...io import AsciiBoardPrinter
+        pp = AsciiBoardPrinter()
+        root = self.create_tac_root(game_state)
+        if root.n_children == 0:
+            return None
+        num_rollouts = 0
+        while num_rollouts < max_rollouts:
+            # Walk down the minimax-optimal path.
+            node, value = self.get_minimax_best(root)
+            if node is None:
+                break
+            # Get ladder points from this state.
+            # Add children to the tree for each ladder point.
+            move_idxs, = node.ladder_points.nonzero()
+            pairs = []
+            for move_idx in move_idxs:
+                pairs.append((
+                    move_idx,
+                    node.state.apply_move(
+                        self._encoder.decode_move_index(move_idx)
+                    )
+                ))
+            assert node.n_children > 0
+            assert node.n_children == len(pairs)
+            self.create_tac_nodes(node, pairs)
+            num_rollouts += 1
+        end = time.time()
+        elapsed = end - start
+        sys.stderr.write(
+            'Ladder check: {} rollouts in {:.3f} seconds\n'.format(
+                num_rollouts, elapsed
+            )
+        )
+        #pp.print_board(game_state.board)
+        #for move_idx, child in root.children.items():
+        #    move = self._encoder.decode_move_index(move_idx)
+        #    leaf, leaf_value = self.get_minimax_leaf(child)
+        #    print(' {}: {:.3f}'.format(
+        #        format_move(move),
+        #        -1 * leaf_value
+        #    ))
+        #    pp.print_board(leaf.state.board)
+        #    print(leaf.value, leaf.state.next_player)
+
+        new_root = convert_tree(root)
+        #print_tree(new_root, self._encoder)
+        return new_root
+
+    def get_minimax_best(self, node):
+        if not node.children:
+            return node, node.value
+        best_leaf = None
+        best_value = -2
+        for _, child in node.children.items():
+            leaf, value = self.get_minimax_best(child)
+            if leaf is None:
+                continue
+            if leaf.n_children > 0:
+                my_value = -1 * value
+                if best_leaf is None or best_value < my_value:
+                    best_leaf = leaf
+                    best_value = my_value
+        return best_leaf, best_value
+
+    def get_minimax_leaf(self, node):
+        if not node.children:
+            return node, node.value
+        best_value = -2
+        best_node = None
+        for _, child in node.children.items():
+            leaf, value = self.get_minimax_leaf(child)
+            my_value = -1 * value
+            if my_value > best_value:
+                best_value = my_value
+                best_node = leaf
+        return best_node, best_value
+
+    def create_tac_root(self, game_state):
+        tensors = [self._encoder.encode(game_state)]
+        tensors = np.array(tensors)
+        priors, values = self._model.predict(tensors)
+        legal_moves = game_state.legal_moves_as_array()
+        ladder_points = get_ladder_points(game_state)
+        return TacNode(
+            game_state,
+            values[0][0],
+            ladder_points,
+            priors[0],
+            legal_moves
+        )
+
+    def create_tac_nodes(self, node, pairs):
+        tensors = [self._encoder.encode(state) for _, state in pairs]
+        tensors = np.array(tensors)
+        probs, values = self._model.predict(tensors)
+        for i, (move_index, next_state) in enumerate(pairs):
+            value = values[i][0]
+            legal_moves = next_state.legal_moves_as_array()
+            ladder_points = get_ladder_points(next_state)
+            move_idxs, = ladder_points.nonzero()
+            for move_idx in move_idxs:
+                move = self._encoder.decode_move_index(move_idx)
+                assert move.is_play
+                assert next_state.board.is_empty(move.point)
+            if node is not None:
+                node.children[move_index] = TacNode(
+                    next_state,
+                    value,
+                    ladder_points,
+                    probs[i],
+                    legal_moves
+                )
+
     def select_move(self, game_state):
         start = time.time()
-        self.root = self.create_node(game_state, add_noise=True)
+        self.root = None
+        if self._ladder_rollouts > 0:
+            self.root = self.read_ladders(game_state, self._ladder_rollouts)
+        if self.root is None:
+            self.root = self.create_node(game_state, add_noise=True)
 
         num_rollouts = 0
         while num_rollouts < self._num_rollouts:
